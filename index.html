@@ -1,0 +1,1992 @@
+<!DOCTYPE html>
+<html lang="lo">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ລະບົບບັນຊີປ່ອຍກູ້ & ບົດສະຫຼຸບການເງິນ SME (Cloud Edition)</title>
+    
+    <!-- Google Noto Sans Lao Font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Lao:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS for modern responsive styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- React and Babel CDN for in-browser execution -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- Firebase Compat SDKs (Essential for Realtime Multi-Device Sync) -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+
+    <style>
+        * {
+            font-family: 'Noto Sans Lao', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+        }
+        /* Custom scrollbar for better visual look inside expandable tables */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800">
+
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo } = React;
+
+        /* ==========================================
+           STABLE SVG ICONS (100% CRASH-PROOF)
+           ========================================== */
+        const IconCalculator = () => (
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+            <rect x="4" y="2" width="16" height="20" rx="2" />
+            <line x1="8" y1="6" x2="16" y2="6" />
+            <line x1="16" y1="10" x2="16" y2="18" />
+            <circle cx="8" cy="11" r="1" />
+            <circle cx="12" cy="11" r="1" />
+            <circle cx="8" cy="15" r="1" />
+            <circle cx="12" cy="15" r="1" />
+            <circle cx="8" cy="19" r="1" />
+            <circle cx="12" cy="19" r="1" />
+          </svg>
+        );
+
+        const IconPercent = () => (
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+            <line x1="19" y1="5" x2="5" y2="19" />
+            <circle cx="6.5" cy="6.5" r="2.5" />
+            <circle cx="17.5" cy="17.5" r="2.5" />
+          </svg>
+        );
+
+        const IconCalendar = () => (
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+            <rect x="3" y="4" width="18" height="18" rx="2" />
+            <line x1="16" y1="2" x2="16" y2="6" />
+            <line x1="8" y1="2" x2="8" y2="6" />
+            <line x1="3" y1="10" x2="21" y2="10" />
+          </svg>
+        );
+
+        const IconUser = () => (
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+            <circle cx="12" cy="7" r="4" />
+          </svg>
+        );
+
+        const IconPhone = () => (
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+            <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+          </svg>
+        );
+
+        const IconPlus = () => (
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+        );
+
+        const IconTrash = () => (
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+            <polyline points="3 6 5 6 21 6" />
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+            <line x1="10" y1="11" x2="10" y2="17" />
+            <line x1="14" y1="11" x2="14" y2="17" />
+          </svg>
+        );
+
+        const IconPrinter = () => (
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+            <polyline points="6 9 6 2 18 2 18 9" />
+            <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+            <rect x="6" y="14" width="12" height="8" />
+          </svg>
+        );
+
+        const IconDownload = () => (
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="7 10 12 15 17 10" />
+            <line x1="12" y1="15" x2="12" y2="3" />
+          </svg>
+        );
+
+        const IconCheck = () => (
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+        );
+
+        const IconWarning = () => (
+          <svg className="w-12 h-12 text-rose-500 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+            <line x1="12" y1="9" x2="12" y2="13" />
+            <line x1="12" y1="17" x2="12.01" y2="17" />
+          </svg>
+        );
+
+        const IconCloud = () => (
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+            <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" />
+          </svg>
+        );
+
+        /* ==========================================
+           STREAMING_CHUNK:Configuring formatting utilities...
+           ========================================== */
+        const formatLAK = (value) => {
+          if (value === null || value === undefined || isNaN(value)) return '0 ₭';
+          const rounded = Math.round(value);
+          const formattedNumber = rounded.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+          return `${formattedNumber} ₭`;
+        };
+
+        const calculateEndDate = (startDateStr, months) => {
+          if (!startDateStr || isNaN(months) || months <= 0) return '—';
+          const date = new Date(startDateStr);
+          if (isNaN(date.getTime())) return '—';
+          date.setMonth(date.getMonth() + parseInt(months, 10));
+          const yyyy = date.getFullYear();
+          const mm = String(date.getMonth() + 1).padStart(2, '0');
+          const dd = String(date.getDate()).padStart(2, '0');
+          return `${yyyy}-${mm}-${dd}`;
+        };
+
+        /* ==========================================
+           STREAMING_CHUNK:Defining calculations...
+           ========================================== */
+        const calculateLoanDetails = (principal, annualRate, months, interestType, startDateStr, fee) => {
+          if (isNaN(principal) || principal <= 0 || isNaN(annualRate) || annualRate < 0 || isNaN(months) || months <= 0) {
+            return null;
+          }
+
+          const feeAmount = isNaN(fee) || fee < 0 ? 0 : fee;
+          let schedule = [];
+          let totalInterest = 0;
+          let monthlyPayment = 0;
+
+          const getInstallmentDate = (monthOffset) => {
+            if (!startDateStr) return '—';
+            const date = new Date(startDateStr);
+            if (isNaN(date.getTime())) return '—';
+            date.setMonth(date.getMonth() + monthOffset);
+            const yyyy = date.getFullYear();
+            const mm = String(date.getMonth() + 1).padStart(2, '0');
+            const dd = String(date.getDate()).padStart(2, '0');
+            return `${yyyy}-${mm}-${dd}`;
+          };
+
+          if (interestType === 'fixed') {
+            totalInterest = principal * (annualRate / 100) * (months / 12);
+            const totalAmountToRepay = principal + totalInterest;
+            monthlyPayment = totalAmountToRepay / months;
+
+            let remainingBalance = principal;
+            const monthlyPrincipalPayment = principal / months;
+            const monthlyInterestPayment = totalInterest / months;
+
+            for (let i = 1; i <= months; i++) {
+              remainingBalance -= monthlyPrincipalPayment;
+              schedule.push({
+                month: i,
+                paymentDate: getInstallmentDate(i),
+                payment: monthlyPayment,
+                principalPayment: monthlyPrincipalPayment,
+                interestPayment: monthlyInterestPayment,
+                remainingBalance: Math.max(0, remainingBalance),
+                status: 'unpaid'
+              });
+            }
+          } else {
+            const monthlyRate = (annualRate / 100) / 12;
+            if (monthlyRate === 0) {
+              monthlyPayment = principal / months;
+              let remainingBalance = principal;
+              for (let i = 1; i <= months; i++) {
+                remainingBalance -= monthlyPayment;
+                schedule.push({
+                  month: i,
+                  paymentDate: getInstallmentDate(i),
+                  payment: monthlyPayment,
+                  principalPayment: monthlyPayment,
+                  interestPayment: 0,
+                  remainingBalance: Math.max(0, remainingBalance),
+                  status: 'unpaid'
+                });
+              }
+            } else {
+              monthlyPayment = (principal * monthlyRate * Math.pow(1 + monthlyRate, months)) / (Math.pow(1 + monthlyRate, months) - 1);
+              let currentBalance = principal;
+              for (let i = 1; i <= months; i++) {
+                const interestForMonth = currentBalance * monthlyRate;
+                let principalForMonth = monthlyPayment - interestForMonth;
+                if (i === months) {
+                  principalForMonth = currentBalance;
+                  monthlyPayment = principalForMonth + interestForMonth;
+                }
+                currentBalance -= principalForMonth;
+                totalInterest += interestForMonth;
+                schedule.push({
+                  month: i,
+                  paymentDate: getInstallmentDate(i),
+                  payment: monthlyPayment,
+                  principalPayment: principalForMonth,
+                  interestPayment: interestForMonth,
+                  remainingBalance: Math.max(0, currentBalance),
+                  status: 'unpaid'
+                });
+              }
+            }
+          }
+
+          return {
+            monthlyPayment,
+            totalInterest,
+            totalRepayment: principal + totalInterest,
+            feeAmount,
+            totalExpectedReturn: principal + totalInterest + feeAmount,
+            schedule
+          };
+        };
+
+        /* ==========================================
+           STREAMING_CHUNK:Initializing application state...
+           ========================================== */
+        function App() {
+          // Dynamic Firebase Configuration state (Loads from localStorage to enable multi-device sync easily)
+          const [fbConfig, setFbConfig] = useState(() => {
+            const saved = localStorage.getItem('sme_lender_firebase_config');
+            return saved ? JSON.parse(saved) : null;
+          });
+
+          const [firebaseConnected, setFirebaseConnected] = useState(false);
+          const [showConfigModal, setShowConfigModal] = useState(false);
+          
+          // Temporary fields for configuration modal
+    const firebaseConfig = {
+  apiKey: "AIzaSyCkt-XWSNkojyWoiApDXpBNyO0h_i7kw_Q",
+  authDomain: "sme-lender-by-art.firebaseapp.com",
+  projectId: "sme-lender-by-art",
+  storageBucket: "sme-lender-by-art.firebasestorage.app",
+  messagingSenderId: "582313757461",
+  appId: "1:582313757461:web:12cbd1f6c28cfb4c7d771c",
+  measurementId: "G-Q9WNVSJ8V4"
+};
+
+          // State variables (Will automatically sync with Firebase if configured, otherwise falls back to localStorage)
+          const [customers, setCustomers] = useState([]);
+          const [otherTransactions, setOtherTransactions] = useState([]);
+          const [ownerCapital, setOwnerCapital] = useState(500000000); 
+          const [ownerLiabilities, setOwnerLiabilities] = useState(100000000); 
+
+          const [showSuccessMsg, setShowSuccessMsg] = useState(false);
+          const [expandedCustomerId, setExpandedCustomerId] = useState(null);
+          const [customerToDelete, setCustomerToDelete] = useState(null);
+          const [isHistoryExpanded, setIsHistoryExpanded] = useState(false);
+
+          // Form States
+          const [formData, setFormData] = useState({
+            name: '',
+            phone: '',
+            startDate: new Date().toISOString().split('T')[0],
+            amount: 15000000,
+            rate: 12,
+            term: 12,
+            type: 'reducing',
+            fee: 150000 
+          });
+
+          const [otherTransForm, setOtherTransForm] = useState({
+            type: 'income',
+            amount: '',
+            description: '',
+            date: new Date().toISOString().split('T')[0]
+          });
+
+          /* ==========================================
+             STREAMING_CHUNK:Firebase Initialization & Sync Loop...
+             ========================================== */
+          useEffect(() => {
+            if (!fbConfig) {
+              // Local fallback fallback
+              const localCust = localStorage.getItem('sme_local_customers');
+              const localTrans = localStorage.getItem('sme_local_transactions');
+              const localCap = localStorage.getItem('sme_local_capital');
+              const localLiab = localStorage.getItem('sme_local_liabilities');
+
+              if (localCust) setCustomers(JSON.parse(localCust));
+              else {
+                // Initial Default Demo Data if completely empty
+                setCustomers([
+                  {
+                    id: 'demo-1',
+                    name: 'ສົມຊິດ ພັດທະນາ',
+                    phone: '02055567812',
+                    startDate: '2026-05-19',
+                    amount: 25000000,
+                    rate: 10,
+                    term: 6,
+                    type: 'reducing',
+                    fee: 250000,
+                    endDate: '2026-11-19',
+                    results: calculateLoanDetails(25000000, 10, 6, 'reducing', '2026-05-19', 250000)
+                  }
+                ]);
+              }
+
+              if (localTrans) setOtherTransactions(JSON.parse(localTrans));
+              else {
+                setOtherTransactions([
+                  { id: 't-1', type: 'income', amount: 500000, description: 'ຄ່າທີ່ປຶກສາທຸລະກິດ', date: '2026-05-20' },
+                  { id: 't-2', type: 'expense', amount: 120000, description: 'ຊື້ເຈ້ຍ ແລະ ປາກກາຫ້ອງການ', date: '2026-05-21' }
+                ]);
+              }
+
+              if (localCap) setOwnerCapital(parseFloat(localCap));
+              if (localLiab) setOwnerLiabilities(parseFloat(localLiab));
+              
+              setFirebaseConnected(false);
+              return;
+            }
+
+            // Initialize Firebase App
+            try {
+              let app;
+              if (!firebase.apps.length) {
+                app = firebase.initializeApp(fbConfig);
+              } else {
+                app = firebase.app();
+              }
+              const db = app.database();
+              setFirebaseConnected(true);
+
+              // Setup Real-time Listeners
+              const customersRef = db.ref('customers');
+              customersRef.on('value', (snapshot) => {
+                const val = snapshot.val();
+                setCustomers(val ? Object.values(val) : []);
+              });
+
+              const transRef = db.ref('otherTransactions');
+              transRef.on('value', (snapshot) => {
+                const val = snapshot.val();
+                setOtherTransactions(val ? Object.values(val) : []);
+              });
+
+              const capitalRef = db.ref('ownerCapital');
+              capitalRef.on('value', (snapshot) => {
+                const val = snapshot.val();
+                if (val !== null) setOwnerCapital(val);
+              });
+
+              const liabilitiesRef = db.ref('ownerLiabilities');
+              liabilitiesRef.on('value', (snapshot) => {
+                const val = snapshot.val();
+                if (val !== null) setOwnerLiabilities(val);
+              });
+
+              // Clean up listeners on unmount or config changes
+              return () => {
+                customersRef.off();
+                transRef.off();
+                capitalRef.off();
+                liabilitiesRef.off();
+              };
+
+            } catch (err) {
+              console.error("Firebase connection error: ", err);
+              setFirebaseConnected(false);
+            }
+
+          }, [fbConfig]);
+
+          // Sync local data to LocalStorage if Firebase is offline
+          useEffect(() => {
+            if (!firebaseConnected) {
+              localStorage.setItem('sme_local_customers', JSON.stringify(customers));
+            }
+          }, [customers, firebaseConnected]);
+
+          useEffect(() => {
+            if (!firebaseConnected) {
+              localStorage.setItem('sme_local_transactions', JSON.stringify(otherTransactions));
+            }
+          }, [otherTransactions, firebaseConnected]);
+
+          const updateCapitalLocalOrCloud = (newVal) => {
+            setOwnerCapital(newVal);
+            if (firebaseConnected) {
+              firebase.database().ref('ownerCapital').set(newVal);
+            } else {
+              localStorage.setItem('sme_local_capital', newVal.toString());
+            }
+          };
+
+          const updateLiabilitiesLocalOrCloud = (newVal) => {
+            setOwnerLiabilities(newVal);
+            if (firebaseConnected) {
+              firebase.database().ref('ownerLiabilities').set(newVal);
+            } else {
+              localStorage.setItem('sme_local_liabilities', newVal.toString());
+            }
+          };
+
+          const handleInputChange = (e) => {
+            const { name, value } = e.target;
+            setFormData(prev => ({ ...prev, [name]: value }));
+          };
+
+          const handleTypeChange = (type) => {
+            setFormData(prev => ({ ...prev, type }));
+          };
+
+          const livePreview = useMemo(() => {
+            return calculateLoanDetails(
+              parseFloat(formData.amount),
+              parseFloat(formData.rate),
+              parseInt(formData.term, 10),
+              formData.type,
+              formData.startDate,
+              parseFloat(formData.fee)
+            );
+          }, [formData.amount, formData.rate, formData.term, formData.type, formData.startDate, formData.fee]);
+
+          const liveEndDate = useMemo(() => {
+            return calculateEndDate(formData.startDate, formData.term);
+          }, [formData.startDate, formData.term]);
+
+          /* ==========================================
+             STREAMING_CHUNK:Structuring ledger transactions...
+             ========================================== */
+          const handleSaveCustomer = () => {
+            if (!formData.name.trim() || !livePreview) return;
+
+            const newCustId = Date.now().toString();
+            const newCustomer = {
+              id: newCustId,
+              ...formData,
+              amount: parseFloat(formData.amount),
+              rate: parseFloat(formData.rate),
+              term: parseInt(formData.term, 10),
+              fee: parseFloat(formData.fee) || 0,
+              endDate: liveEndDate,
+              results: livePreview
+            };
+
+            if (firebaseConnected) {
+              firebase.database().ref(`customers/${newCustId}`).set(newCustomer);
+            } else {
+              setCustomers(prev => [newCustomer, ...prev]);
+            }
+
+            setShowSuccessMsg(true);
+            setTimeout(() => setShowSuccessMsg(false), 3000);
+
+            setFormData(prev => ({
+              ...prev,
+              name: '',
+              phone: '',
+              amount: 15000000,
+              fee: 150000
+            }));
+          };
+
+          const confirmDeleteCustomer = () => {
+            if (!customerToDelete) return;
+            if (firebaseConnected) {
+              firebase.database().ref(`customers/${customerToDelete.id}`).remove();
+            } else {
+              setCustomers(prev => prev.filter(c => c.id !== customerToDelete.id));
+            }
+            setCustomerToDelete(null);
+          };
+
+          const toggleInstallmentStatus = (customerId, monthIndex) => {
+            const updatedCustomers = customers.map(customer => {
+              if (customer.id === customerId) {
+                const updatedSchedule = customer.results.schedule.map(item => {
+                  if (item.month === monthIndex) {
+                    return { ...item, status: item.status === 'paid' ? 'unpaid' : 'paid' };
+                  }
+                  return item;
+                });
+                return {
+                  ...customer,
+                  results: {
+                    ...customer.results,
+                    schedule: updatedSchedule
+                  }
+                };
+              }
+              return customer;
+            });
+
+            if (firebaseConnected) {
+              const customerToUpdate = updatedCustomers.find(c => c.id === customerId);
+              firebase.database().ref(`customers/${customerId}`).set(customerToUpdate);
+            } else {
+              setCustomers(updatedCustomers);
+            }
+          };
+
+          const handleAddOtherTransaction = (e) => {
+            e.preventDefault();
+            const amt = parseFloat(otherTransForm.amount);
+            if (isNaN(amt) || amt <= 0 || !otherTransForm.description.trim()) return;
+
+            const newTransId = `t-${Date.now()}`;
+            const newTrans = {
+              id: newTransId,
+              type: otherTransForm.type,
+              amount: amt,
+              description: otherTransForm.description,
+              date: otherTransForm.date
+            };
+
+            if (firebaseConnected) {
+              firebase.database().ref(`otherTransactions/${newTransId}`).set(newTrans);
+            } else {
+              setOtherTransactions(prev => [newTrans, ...prev]);
+            }
+
+            setOtherTransForm({
+              type: 'income',
+              amount: '',
+              description: '',
+              date: new Date().toISOString().split('T')[0]
+            });
+          };
+
+          const handleDeleteOtherTransaction = (id) => {
+            if (firebaseConnected) {
+              firebase.database().ref(`otherTransactions/${id}`).remove();
+            } else {
+              setOtherTransactions(prev => prev.filter(t => t.id !== id));
+            }
+          };
+
+          const handleSaveFirebaseConfig = (e) => {
+            e.preventDefault();
+            localStorage.setItem('sme_lender_firebase_config', JSON.stringify(tempConfig));
+            setFbConfig(tempConfig);
+            setShowConfigModal(false);
+          };
+
+          const handleDisconnectFirebase = () => {
+            localStorage.removeItem('sme_lender_firebase_config');
+            setFbConfig(null);
+            setFirebaseConnected(false);
+          };
+
+          /* ==========================================
+             STREAMING_CHUNK:Compiling financial statements...
+             ========================================== */
+          const financialSummary = useMemo(() => {
+            const totalPrincipalLoaned = customers.reduce((sum, c) => sum + c.amount, 0);
+            const totalFeesCollected = customers.reduce((sum, c) => sum + (c.fee || 0), 0);
+            
+            let totalPrincipalReceived = 0;
+            let totalInterestReceived = 0;
+            let totalExpectedInterest = 0;
+
+            customers.forEach(c => {
+              totalExpectedInterest += c.results.totalInterest;
+              c.results.schedule.forEach(item => {
+                if (item.status === 'paid') {
+                  totalPrincipalReceived += item.principalPayment;
+                  totalInterestReceived += item.interestPayment;
+                }
+              });
+            });
+
+            const totalRepaymentsReceived = totalPrincipalReceived + totalInterestReceived;
+
+            const totalOtherIncome = otherTransactions
+              .filter(t => t.type === 'income')
+              .reduce((sum, t) => sum + t.amount, 0);
+
+            const totalOtherExpenses = otherTransactions
+              .filter(t => t.type === 'expense')
+              .reduce((sum, t) => sum + t.amount, 0);
+
+            const activeOutstandingPortfolio = totalPrincipalLoaned - totalPrincipalReceived;
+            const interestReceivable = totalExpectedInterest - totalInterestReceived;
+
+            const cashOnHand = ownerCapital + ownerLiabilities + totalFeesCollected + totalRepaymentsReceived + totalOtherIncome - totalPrincipalLoaned - totalOtherExpenses;
+            const totalAssets = cashOnHand + activeOutstandingPortfolio + interestReceivable;
+            const totalLiabilities = ownerLiabilities;
+
+            const totalIncomeFromLoans = totalExpectedInterest + totalFeesCollected;
+            const accumulatedProfit = totalIncomeFromLoans + totalOtherIncome - totalOtherExpenses;
+            const totalEquity = ownerCapital + accumulatedProfit;
+
+            return {
+              cashOnHand,
+              activeOutstandingPortfolio,
+              interestReceivable,
+              totalAssets,
+              totalLiabilities,
+              initialCapital: ownerCapital,
+              accumulatedProfit,
+              totalEquity,
+              totalLiabilitiesAndEquity: totalLiabilities + totalEquity,
+              totalPrincipalLoaned,
+              totalFeesCollected,
+              totalExpectedInterest,
+              totalRepaymentsReceived,
+              totalOtherIncome,
+              totalOtherExpenses,
+              netProfit: accumulatedProfit
+            };
+          }, [customers, otherTransactions, ownerCapital, ownerLiabilities]);
+
+          /* ==========================================
+             STREAMING_CHUNK:Configuring printable formats...
+             ========================================== */
+          const printSingleCustomerSchedule = (customer) => {
+            const printWindow = window.open('', '_blank');
+            if (!printWindow) return;
+
+            const scheduleRowsHtml = customer.results.schedule.map(row => `
+              <tr class="item-row">
+                <td>${row.month}</td>
+                <td class="date-cell">${row.paymentDate}</td>
+                <td class="amount-cell text-bold">${formatLAK(row.payment)}</td>
+                <td class="amount-cell text-green">${formatLAK(row.principalPayment)}</td>
+                <td class="amount-cell text-orange">${formatLAK(row.interestPayment)}</td>
+                <td class="amount-cell text-bold">${formatLAK(row.remainingBalance)}</td>
+                <td class="status-cell">${row.status === 'paid' ? 'ຊຳລະແລ້ວ' : 'ຄ້າງຊຳລະ'}</td>
+              </tr>
+            `).join('');
+
+            printWindow.document.write(`
+              <html>
+                <head>
+                  <title>ແຜນການຊຳລະເງິນກູ້ - ${customer.name}</title>
+                  <style>
+                    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Lao:wght@300;400;500;700&display=swap');
+                    body { 
+                      font-family: 'Noto Sans Lao', Arial, sans-serif; 
+                      margin: 40px; 
+                      color: #1e293b; 
+                      line-height: 1.6;
+                      font-size: 14px;
+                    }
+                    .header { 
+                      text-align: center; 
+                      margin-bottom: 30px; 
+                      border-bottom: 3px double #cbd5e1; 
+                      padding-bottom: 20px; 
+                    }
+                    .title { 
+                      font-size: 24px; 
+                      font-weight: bold; 
+                      color: #0f172a; 
+                      margin: 0 0 5px 0; 
+                    }
+                    .subtitle { 
+                      font-size: 14px; 
+                      color: #64748b; 
+                      margin: 0; 
+                    }
+                    .info-grid { 
+                      display: grid; 
+                      grid-template-cols: 1fr 1fr; 
+                      gap: 15px; 
+                      margin-bottom: 25px; 
+                    }
+                    .info-card { 
+                      padding: 12px; 
+                      background: #f8fafc; 
+                      border: 1px solid #e2e8f0; 
+                      border-radius: 8px; 
+                    }
+                    .card-label { 
+                      font-size: 11px; 
+                      font-weight: bold; 
+                      color: #64748b; 
+                      text-transform: uppercase; 
+                      margin-bottom: 4px;
+                    }
+                    .card-val { 
+                      font-size: 15px; 
+                      font-weight: bold; 
+                      color: #0f172a; 
+                    }
+                    table { 
+                      width: 100%; 
+                      border-collapse: collapse; 
+                      margin-top: 15px; 
+                      font-size: 13px; 
+                    }
+                    th { 
+                      background: #f1f5f9; 
+                      padding: 10px 8px; 
+                      border: 1px solid #cbd5e1; 
+                      font-weight: bold; 
+                      text-align: center; 
+                      color: #475569;
+                    }
+                    td {
+                      padding: 9px 8px; 
+                      border: 1px solid #e2e8f0;
+                    }
+                    .item-row:nth-child(even) {
+                      background: #f8fafc;
+                    }
+                    .text-bold { font-weight: bold; color: #0f172a; }
+                    .text-green { color: #047857; font-weight: 500; }
+                    .text-orange { color: #b45309; font-weight: 500; }
+                    .date-cell { text-align: center; font-weight: bold; color: #2563eb; }
+                    .amount-cell { text-align: right; }
+                    .status-cell { text-align: center; font-weight: bold; }
+                    
+                    .contract-terms {
+                      background: #fff;
+                      border: 1px solid #e2e8f0;
+                      padding: 20px;
+                      border-radius: 8px;
+                      margin-top: 25px;
+                      font-size: 12.5px;
+                    }
+                    .contract-terms h3 {
+                      margin-top: 0;
+                      color: #0f172a;
+                      border-bottom: 1px solid #e2e8f0;
+                      padding-bottom: 8px;
+                    }
+                    .legal-declaration {
+                      margin-top: 15px;
+                      background: #f0fdf4;
+                      border: 1px solid #bbf7d0;
+                      padding: 15px;
+                      border-radius: 8px;
+                      color: #166534;
+                      font-weight: 500;
+                    }
+                    .signatures { 
+                      display: flex; 
+                      justify-content: space-between; 
+                      margin-top: 55px; 
+                      font-size: 13px; 
+                    }
+                    .sig-box { 
+                      text-align: center; 
+                      width: 42%; 
+                      border-top: 1px solid #94a3b8; 
+                      padding-top: 8px; 
+                    }
+                    .print-btn-container {
+                      margin-top: 35px;
+                      text-align: center;
+                    }
+                    .btn-action {
+                      padding: 10px 24px; 
+                      font-size: 14px; 
+                      background: #0f172a; 
+                      color: white; 
+                      border: none; 
+                      border-radius: 6px; 
+                      cursor: pointer; 
+                      font-weight: bold; 
+                    }
+                    @media print {
+                      .no-print { display: none !important; }
+                      body { margin: 15px; }
+                    }
+                  </style>
+                </head>
+                <body>
+                  <div class="header">
+                    <h1 class="title">ສັນຍາກູ້ຢືມເງິນ ແລະ ຕາຕະລາງການຊຳລະ</h1>
+                    <p class="subtitle">ເອກະສານຜູກພັນທາງກົດໝາຍລະຫວ່າງ ຜູ້ໃຫ້ກູ້ ແລະ ຜູ້ກູ້ຢືມ</p>
+                  </div>
+                  
+                  <div class="info-grid">
+                    <div class="info-card">
+                      <div class="card-label">ຂໍ້ມູນຜູ້ກູ້ຢືມ</div>
+                      <div class="card-val">${customer.name}</div>
+                      <div style="color: #64748b; font-size: 12px; margin-top: 6px;"><strong>ເບີຕິດຕໍ່:</strong> ${customer.phone || '—'}</div>
+                    </div>
+                    <div class="info-card">
+                      <div class="card-label">ເງື່ອນໄຂການກູ້ຢືມ</div>
+                      <div class="card-val">ຕົ້ນທຶນປ່ອຍກູ້: ${formatLAK(customer.amount)}</div>
+                      <div style="color: #64748b; font-size: 12px; margin-top: 4px;">
+                        <strong>ຄ່າທຳນຽມເກັບກ່ອນ:</strong> ${formatLAK(customer.fee)} <br/> 
+                        <strong>ອັດຕາດອກເບ້ຍ:</strong> ${customer.rate}% ຕໍ່ປີ (${customer.type === 'reducing' ? 'ຫຼຸດຕົ້ນຫຼຸດດອກ' : 'ດອກເບ້ຍຄົງທີ່'})
+                      </div>
+                    </div>
+                    <div class="info-card">
+                      <div class="card-label">ວັນທີເລີ່ມຕົ້ນສັນຍາ</div>
+                      <div class="card-val">${customer.startDate}</div>
+                    </div>
+                    <div class="info-card">
+                      <div class="card-label">ວັນທີຄົບກຳນົດສັນຍາ</div>
+                      <div class="card-val" style="color: #047857;">${customer.endDate}</div>
+                    </div>
+                  </div>
+
+                  <h4 style="margin: 20px 0 10px 0; border-bottom: 2px solid #cbd5e1; padding-bottom: 5px;">ຕາຕະລາງການຊຳລະຄືນເປັນງວດ</h4>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th width="8%">ງວດທີ່</th>
+                        <th width="24%">ວັນທີກຳນົດສົ່ງ</th>
+                        <th width="22%" style="text-align: right;">ຍອດຊຳລະທັງໝົດ</th>
+                        <th width="16%" style="text-align: right;">ຕົ້ນທຶນ</th>
+                        <th width="16%" style="text-align: right;">ດອກເບ້ຍ</th>
+                        <th width="14%" style="text-align: right;">ຍອດເຫຼືອຕົວຈິງ</th>
+                        <th width="14%">ສະຖານະ</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${scheduleRowsHtml}
+                    </tbody>
+                  </table>
+
+                  <div class="contract-terms">
+                    <h3>ເງື່ອນໄຂ ແລະ ຂໍ້ຜູກພັນທາງກົດໝາຍ</h3>
+                    <p><strong>ມາດຕາ 1: ການຮັບເງິນ ແລະ ຄ່າທຳນຽມ:</strong> ຜູ້ກູ້ຢືມໄດ້ຮັບເງິນຕົ້ນທຶນເຕັມຈຳນວນ ແລະ ຕົກລົງຊຳລະຄ່າທຳນຽມທຳອິດຈຳນວນ <strong>${formatLAK(customer.fee)}</strong> ໃຫ້ແກ່ຜູ້ໃຫ້ກູ້ໃນວັນເຊັນສັນຍານີ້.</p>
+                    <p><strong>ມາດຕາ 2: ການຊຳລະຄືນ:</strong> ຜູ້ກູ້ຢືມມີພັນທະໃນການຊຳລະຕົ້ນທຶນ ແລະ ດອກເບ້ຍ ຕາມວັນທີ ແລະ ງວດທີ່ລະບຸໄວ້ໃນຕາຕະລາງຢ່າງເຂັ້ມງວດ.</p>
+                    <p><strong>ມາດຕາ 3: ຄ່າປັບໃໝຊຳລະຊ້າ:</strong> ໃນກໍລະນີທີ່ຜູ້ກູ້ຢືມຊຳລະຊ້າກວ່າກຳນົດ, ຜູ້ໃຫ້ກູ້ມີສິດປັບໃໝ ແລະ ເກັບຄ່າທຳນຽມຕິດຕາມໜີ້ຕາມທີ່ກົດໝາຍກຳນົດ.</p>
+                    <p><strong>ມາດຕາ 4: ສິດທິໃນການຮຽກເກັບໜີ້ຄືນກ່ອນກຳນົດ:</strong> ຫາກຜູ້ກູ້ຢືມລະເມີດເງື່ອນໄຂໃດໜຶ່ງ, ຜູ້ໃຫ້ກູ້ມີສິດຍົກເລີກສັນຍາ ແລະ ຮຽກຮ້ອງໃຫ້ຊຳລະໜີ້ທັງໝົດຄືນທັນທີ.</p>
+                    
+                    <div class="legal-declaration">
+                      <strong>ຖະແຫຼງການຍອມຮັບເງື່ອນໄຂ:</strong><br/>
+                      ຂ້າພະເຈົ້າ (ຜູ້ກູ້ຢືມ) ຂໍຢັ້ງຢືນວ່າ ໄດ້ອ່ານ, ຮັບຊາບ ແລະ ເຂົ້າໃຈເນື້ອໃນທັງໝົດຂອງສັນຍານີ້ຢ່າງລະອຽດ. ຂ້າພະເຈົ້າ <strong>"ຕົກລົງ ແລະ ຍອມຮັບທຸກເງື່ອນໄຂ"</strong> ໂດຍບໍ່ມີເງື່ອນໄຂໃດໆ ແລະ ຈະຮັບຜິດຊອບໃນການຊຳລະຄືນເງິນກູ້ຢືມນີ້ ຈົນກວ່າຈະຄົບຖ້ວນທຸກກີບ ຕາມທີ່ໄດ້ກຳນົດໄວ້ຂ້າງເທິງ.
+                    </div>
+                  </div>
+
+                  <div class="signatures">
+                    <div class="sig-box">
+                      <p style="margin: 0; font-weight: bold; text-transform: uppercase; font-size: 11px; color: #475569;">ລາຍເຊັນ ແລະ ຢືນຢັນຈາກຜູ້ກູ້ຢືມ</p>
+                      <p style="margin: 12px 0; color: #64748b; font-size: 11px;">(ຂ້າພະເຈົ້າເຫັນດີ ແລະ ຍອມຮັບທຸກເງື່ອນໄຂ)</p>
+                      <p style="margin: 35px 0 0 0; color: #64748b; font-size: 11px;">ເຊັນ ແລະ ຂຽນຊື່ແຈ້ງ</p>
+                    </div>
+                    <div class="sig-box">
+                      <p style="margin: 0; font-weight: bold; text-transform: uppercase; font-size: 11px; color: #475569;">ຕົວແທນຜູ້ໃຫ້ກູ້ຢືມ</p>
+                      <p style="margin: 12px 0; color: #64748b; font-size: 11px;">(ອະນຸມັດ ແລະ ປ່ອຍສິນເຊື່ອຢ່າງຖືກຕ້ອງ)</p>
+                      <p style="margin: 35px 0 0 0; color: #64748b; font-size: 11px;">ເຊັນ, ປະທັບຕາ ແລະ ວັນທີ</p>
+                    </div>
+                  </div>
+
+                  <div class="print-btn-container no-print">
+                    <button onclick="window.print()" class="btn-action">
+                      ພິມເອກະສັນສັນຍານີ້
+                    </button>
+                  </div>
+                </body>
+              </html>
+            `);
+            printWindow.document.close();
+          };
+
+          /* ==========================================
+             STREAMING_CHUNK:Configuring financial print statement...
+             ========================================== */
+          const printFinancialStatement = () => {
+            const printWindow = window.open('', '_blank');
+            if (!printWindow) return;
+
+            printWindow.document.write(`
+              <html>
+                <head>
+                  <title>ບົດສະຫຼຸບຖານະການເງິນ</title>
+                  <style>
+                    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Lao:wght@300;400;500;700&display=swap');
+                    body { 
+                      font-family: 'Noto Sans Lao', Arial, sans-serif; 
+                      margin: 40px; 
+                      color: #0f172a; 
+                      line-height: 1.6;
+                      font-size: 14px;
+                    }
+                    .header {
+                      text-align: center;
+                      border-bottom: 2px solid #0f172a;
+                      padding-bottom: 15px;
+                      margin-bottom: 30px;
+                    }
+                    .title {
+                      font-size: 22px;
+                      font-weight: bold;
+                      margin: 0;
+                    }
+                    .date-meta {
+                      font-size: 12px;
+                      color: #475569;
+                      margin-top: 5px;
+                    }
+                    .grid-sections {
+                      display: grid;
+                      grid-template-cols: 1fr 1fr;
+                      gap: 20px;
+                      margin-bottom: 30px;
+                    }
+                    .section-box {
+                      border: 1px solid #cbd5e1;
+                      border-radius: 6px;
+                      overflow: hidden;
+                    }
+                    .box-header {
+                      background: #0f172a;
+                      color: #ffffff;
+                      padding: 8px 12px;
+                      font-weight: bold;
+                      font-size: 13px;
+                    }
+                    .box-body {
+                      padding: 12px;
+                    }
+                    .flex-row {
+                      display: flex;
+                      justify-content: space-between;
+                      padding: 6px 0;
+                      border-bottom: 1px dashed #e2e8f0;
+                      font-size: 13px;
+                    }
+                    .flex-row:last-child {
+                      border-bottom: none;
+                    }
+                    .total-row {
+                      display: flex;
+                      justify-content: space-between;
+                      font-weight: bold;
+                      background: #f1f5f9;
+                      padding: 8px 12px;
+                      border-top: 1px solid #cbd5e1;
+                      font-size: 14px;
+                    }
+                    .verification-box {
+                      background: #f0fdf4;
+                      border: 1px solid #bbf7d0;
+                      padding: 12px;
+                      border-radius: 6px;
+                      font-weight: bold;
+                      text-align: center;
+                      font-size: 13px;
+                      color: #166534;
+                      margin-bottom: 30px;
+                    }
+                    .signatures {
+                      display: flex;
+                      justify-content: space-between;
+                      margin-top: 60px;
+                    }
+                    .sig-box {
+                      text-align: center;
+                      width: 45%;
+                      border-top: 1px solid #94a3b8;
+                      padding-top: 8px;
+                      font-size: 12px;
+                    }
+                    .no-print {
+                      text-align: center;
+                      margin-top: 30px;
+                    }
+                    .btn-print {
+                      padding: 10px 24px;
+                      background: #0f172a;
+                      color: white;
+                      font-weight: bold;
+                      border: none;
+                      border-radius: 6px;
+                      cursor: pointer;
+                    }
+                    @media print {
+                      .no-print { display: none !important; }
+                    }
+                  </style>
+                </head>
+                <body>
+                  <div class="header">
+                    <h1 class="title">ບົດສະຫຼຸບຖານະການເງິນ ແລະ ງົບດຸນ (Balance Sheet)</h1>
+                    <p class="date-meta">ວັນທີລາຍງານ: ${new Date().toISOString().split('T')[0]}</p>
+                  </div>
+
+                  <div class="verification-box">
+                    ✓ ລະບົບກວດສອບບັນຊີດຸນດ່ຽງ: ຊັບສິນ ${formatLAK(financialSummary.totalAssets)} = ໜີ້ສິນ ແລະ ທຶນ ${formatLAK(financialSummary.totalLiabilitiesAndEquity)}
+                  </div>
+
+                  <div class="grid-sections">
+                    <div class="section-box">
+                      <div class="box-header">ຊັບສິນ (ASSETS)</div>
+                      <div class="box-body">
+                        <div class="flex-row">
+                          <span>ເງິນສົດໃນຄັງ (Cash on Hand)</span>
+                          <strong>${formatLAK(financialSummary.cashOnHand)}</strong>
+                        </div>
+                        <div class="flex-row">
+                          <span>ຍອດເງິນກູ້ຄົງຄ້າງ (Outstanding Portfolio)</span>
+                          <strong>${formatLAK(financialSummary.activeOutstandingPortfolio)}</strong>
+                        </div>
+                        <div class="flex-row">
+                          <span>ດອກເບ້ຍຄ້າງຮັບ (Interest Receivable)</span>
+                          <strong>${formatLAK(financialSummary.interestReceivable)}</strong>
+                        </div>
+                      </div>
+                      <div class="total-row">
+                        <span>ລວມຊັບສິນທັງໝົດ</span>
+                        <span>${formatLAK(financialSummary.totalAssets)}</span>
+                      </div>
+                    </div>
+
+                    <div class="section-box">
+                      <div class="box-header">ໜີ້ສິນ ແລະ ສ່ວນຂອງເຈົ້າຂອງ (LIABILITIES & EQUITY)</div>
+                      <div class="box-body">
+                        <div style="font-weight: bold; margin-bottom: 5px; font-size: 11px; color: #475569;">ໜີ້ສິນ (Liabilities):</div>
+                        <div class="flex-row" style="padding-left: 10px;">
+                          <span>ເງິນກູ້ຢືມພາຍນອກ</span>
+                          <strong>${formatLAK(financialSummary.totalLiabilities)}</strong>
+                        </div>
+                        
+                        <div style="font-weight: bold; margin-top: 10px; margin-bottom: 5px; font-size: 11px; color: #475569;">ສ່ວນຂອງເຈົ້າຂອງ (Equity):</div>
+                        <div class="flex-row" style="padding-left: 10px;">
+                          <span>ທຶນເລີ່ມຕົ້ນ</span>
+                          <strong>${formatLAK(financialSummary.initialCapital)}</strong>
+                        </div>
+                        <div class="flex-row" style="padding-left: 10px;">
+                          <span>ລາຍຮັບສະສົມສຸທິ</span>
+                          <strong style="color: #166534;">${formatLAK(financialSummary.accumulatedProfit)}</strong>
+                        </div>
+                      </div>
+                      <div class="total-row">
+                        <span>ລວມໜີ້ສິນ & ທຶນ</span>
+                        <span>${formatLAK(financialSummary.totalLiabilitiesAndEquity)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="grid-sections">
+                    <div class="section-box">
+                      <div class="box-header">ສະຫຼຸບການເຄື່ອນໄຫວລາຍຮັບ (OPERATIONAL INCOME)</div>
+                      <div class="box-body">
+                        <div class="flex-row">
+                          <span>ລາຍຮັບດອກເບ້ຍຄ້າງຮັບ</span>
+                          <strong>${formatLAK(financialSummary.totalExpectedInterest)}</strong>
+                        </div>
+                        <div class="flex-row">
+                          <span>ຄ່າທຳນຽມປ່ອຍກູ້ທຳອິດ</span>
+                          <strong>${formatLAK(financialSummary.totalFeesCollected)}</strong>
+                        </div>
+                        <div class="flex-row">
+                          <span>ລາຍຮັບຈາກແຫຼ່ງອື່ນໆ</span>
+                          <strong>${formatLAK(financialSummary.totalOtherIncome)}</strong>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="section-box">
+                      <div class="box-header">ສະຫຼຸບການເຄື່ອນໄຫວລາຍຈ່າຍ (OPERATIONAL EXPENSES)</div>
+                      <div class="box-body">
+                        <div class="flex-row">
+                          <span>ລາຍຈ່າຍບໍລິຫານ ແລະ ອື່ນໆ</span>
+                          <strong>${formatLAK(financialSummary.totalOtherExpenses)}</strong>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="signatures">
+                    <div class="sig-box">
+                      <p style="margin: 0; font-weight: bold; color: #475569;">ຜູ້ບັນທຶກ ແລະ ສະຫຼຸບບັນຊີ</p>
+                      <p style="margin: 45px 0 0 0; color: #64748b; font-size: 11px;">ເຊັນ ແລະ ວັນທີ</p>
+                    </div>
+                    <div class="sig-box">
+                      <p style="margin: 0; font-weight: bold; color: #475569;">ເຈົ້າຂອງກິດຈະການ</p>
+                      <p style="margin: 45px 0 0 0; color: #64748b; font-size: 11px;">ເຊັນ, ປະທັບຕາ ແລະ ວັນທີ</p>
+                    </div>
+                  </div>
+
+                  <div class="no-print">
+                    <button class="btn-print" onclick="window.print()">ພິມໃບລາຍງານການເງິນນີ້</button>
+                  </div>
+                </body>
+              </html>
+            `);
+            printWindow.document.close();
+          };
+
+          const exportAllToCSV = () => {
+            if (customers.length === 0) return;
+
+            const headers = [
+              'ຊື່ລູກຄ້າ (Customer Name)',
+              'ເບີໂທຕິດຕໍ່ (Phone)',
+              'ວັນທີເລີ່ມຕົ້ນ (Start Date)',
+              'ວັນທີຄົບກຳນົດ (Maturity Date)',
+              'ຕົ້ນທຶນກູ້ຢືມ (LAK)',
+              'ຄ່າທຳນຽມເກັບກ່ອນ (LAK)',
+              'ອັດຕາດອກເບ້ຍ (%)',
+              'ໄລຍະເວລາ (ເດືອນ)',
+              'ປະເພດດອກເບ້ຍ (Type)',
+              'ດອກເບ້ຍຄາດຄະເນ (LAK)',
+              'ຍອດລວມຕ້ອງຊຳລະຄືນ (LAK)',
+              'ຄ່າຜ່ອນຊຳລະຕໍ່ເດືອນ (LAK)'
+            ];
+
+            const rows = customers.map(c => [
+              c.name,
+              c.phone,
+              c.startDate,
+              c.endDate,
+              c.amount,
+              c.fee,
+              c.rate,
+              c.term,
+              c.type === 'reducing' ? 'ຫຼຸດຕົ້ນຫຼຸດດອກ' : 'ດອກເບ້ຍຄົງທີ່',
+              c.results.totalInterest,
+              c.results.totalExpectedReturn,
+              c.results.monthlyPayment
+            ]);
+
+            const bom = '\uFEFF';
+            const csvContent = [headers, ...rows]
+              .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(","))
+              .join("\n");
+
+            const blob = new Blob([bom + csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.setAttribute("href", url);
+            link.setAttribute("download", `ລາຍງານສັນຍາ_EOD_${new Date().toISOString().split('T')[0]}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+          };
+
+          const visibleTransactions = useMemo(() => {
+            if (isHistoryExpanded) return otherTransactions;
+            return otherTransactions.slice(0, 5);
+          }, [otherTransactions, isHistoryExpanded]);
+
+          /* ==========================================
+             STREAMING_CHUNK:Rendering main dashboard layout structure...
+             ========================================== */
+          return (
+            <div className="min-h-screen bg-slate-50 text-slate-850 p-4 md:p-6 font-sans antialiased">
+              
+              {/* FIREBASE CONFIGURATION SETUP MODAL */}
+              {showConfigModal && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                  <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden">
+                    <form onSubmit={handleSaveFirebaseConfig}>
+                      <div className="p-6 space-y-4">
+                        <div className="flex items-center space-x-3 text-blue-600 border-b pb-3">
+                          <IconCloud />
+                          <h3 className="text-lg font-bold text-slate-900">ຕັ້ງຄ່າເຊື່ອມຕໍ່ລະບົບ Cloud Sync (Firebase)</h3>
+                        </div>
+                        <p className="text-xs text-slate-500 leading-relaxed font-semibold">
+                          ປ້ອນຄ່າ Web Config ທີ່ໄດ້ມາຈາກ Firebase Console ຂອງທ່ານ ເພື່ອເຊື່ອມຕໍ່ຂໍ້ມູນໄປຍັງ Cloud ໃຫ້ສາມາດເຂົ້າເຖິງ ແລະ ຊິງຄ໌ຂໍ້ມູນໄດ້ໃນທຸກອຸປະກອນ.
+                        </p>
+                        
+                        <div className="space-y-3 text-xs">
+                          <div>
+                            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">API Key</label>
+                            <input
+                              type="text" required
+                              value={tempConfig.apiKey}
+                              onChange={(e) => setTempConfig({...tempConfig, apiKey: e.target.value})}
+                              className="block w-full px-3 py-1.5 border border-slate-300 rounded-lg sm:text-xs"
+                              placeholder="AIzaSy..."
+                            />
+                          </div>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Auth Domain</label>
+                              <input
+                                type="text" required
+                                value={tempConfig.authDomain}
+                                onChange={(e) => setTempConfig({...tempConfig, authDomain: e.target.value})}
+                                className="block w-full px-3 py-1.5 border border-slate-300 rounded-lg sm:text-xs"
+                                placeholder="your-app.firebaseapp.com"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Database URL</label>
+                              <input
+                                type="text" required
+                                value={tempConfig.databaseURL}
+                                onChange={(e) => setTempConfig({...tempConfig, databaseURL: e.target.value})}
+                                className="block w-full px-3 py-1.5 border border-slate-300 rounded-lg sm:text-xs"
+                                placeholder="https://your-app.firebaseio.com"
+                              />
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Project ID</label>
+                              <input
+                                type="text" required
+                                value={tempConfig.projectId}
+                                onChange={(e) => setTempConfig({...tempConfig, projectId: e.target.value})}
+                                className="block w-full px-3 py-1.5 border border-slate-300 rounded-lg sm:text-xs"
+                                placeholder="your-app-id"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">App ID</label>
+                              <input
+                                type="text" required
+                                value={tempConfig.appId}
+                                onChange={(e) => setTempConfig({...tempConfig, appId: e.target.value})}
+                                className="block w-full px-3 py-1.5 border border-slate-300 rounded-lg sm:text-xs"
+                                placeholder="1:12345:web:abcd"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <div className="bg-slate-50 p-4 flex gap-3 border-t border-slate-100 justify-end">
+                        <button 
+                          type="button"
+                          onClick={() => setShowConfigModal(false)}
+                          className="py-2 px-4 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl font-bold text-xs text-slate-700 transition-all"
+                        >
+                          ຍົກເລີກ
+                        </button>
+                        <button 
+                          type="submit"
+                          className="py-2 px-5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs shadow-md transition-all"
+                        >
+                          ເຊື່ອມຕໍ່ ແລະ ບັນທຶກ
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              )}
+
+              {/* CUSTOM REACTIONAL DELETION MODAL */}
+              {customerToDelete && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                  <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 overflow-hidden transform scale-100 transition-all">
+                    <div className="p-6 text-center space-y-4">
+                      <div className="w-16 h-16 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto">
+                        <IconWarning />
+                      </div>
+                      <div className="space-y-2">
+                        <h3 className="text-lg font-bold text-slate-900">ຢືນຢັນການລົບສັນຍາກູ້ຢືມ?</h3>
+                        <p className="text-xs text-slate-500 leading-relaxed font-semibold">
+                          ທ່ານແນ່ໃຈບໍ່ວ່າຕ້ອງການລົບສັນຍາຂອງ <strong className="text-slate-800 text-sm font-bold">"{customerToDelete.name}"</strong>? 
+                          ການກະທຳນີ້ຈະລຶບຂໍ້ມູນທັງໝົດອອກຈາກບັນຊີລາຍວັນຂອງທ່ານຢ່າງຖາວອນ.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="bg-slate-50 p-4 flex gap-3 border-t border-slate-100">
+                      <button 
+                        onClick={() => setCustomerToDelete(null)}
+                        className="flex-1 py-2.5 px-4 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl font-bold text-xs text-slate-700 transition-all"
+                      >
+                        ຍົກເລີກ
+                      </button>
+                      <button 
+                        onClick={confirmDeleteCustomer}
+                        className="flex-1 py-2.5 px-4 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-bold text-xs shadow-md transition-all"
+                      >
+                        ຢືນຢັນລົບ
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* HEADER BAR */}
+              <div className="max-w-7xl mx-auto space-y-6">
+                <header className="flex flex-col md:flex-row items-start md:items-center justify-between space-y-4 md:space-y-0 mb-6 bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                  <div className="flex items-center space-x-4">
+                    <div className="p-3 bg-emerald-600 rounded-xl text-white shadow-lg">
+                      <IconCalculator />
+                    </div>
+                    <div>
+                      <h1 className="text-2xl font-bold text-slate-950 tracking-tight">ລະບົບບັນຊີປ່ອຍກູ້ & ບົດສະຫຼຸບການເງິນ SME</h1>
+                      <p className="text-xs text-slate-500 font-bold mt-1">
+                        ເຄື່ອງມືຄຸ້ມຄອງການເງິນສຳລັບທຸລະກິດ | 
+                        {firebaseConnected ? (
+                          <span className="text-emerald-600 font-extrabold ml-1">✓ ເຊື່ອມຕໍ່ Cloud Real-time ແລ້ວ</span>
+                        ) : (
+                          <span className="text-amber-600 font-extrabold ml-1">⚠ ໂໝດອອບລາຍ (ບັນທຶກໃນເຄື່ອງນີ້)</span>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
+                    {/* Cloud Sync Config Button */}
+                    {firebaseConnected ? (
+                      <button
+                        onClick={handleDisconnectFirebase}
+                        className="flex items-center justify-center px-4 py-3 bg-rose-50 border border-rose-200 hover:bg-rose-100 text-rose-700 rounded-xl font-bold transition-all text-xs"
+                      >
+                        <span className="mr-2"><IconCloud /></span>
+                        ຕັດການເຊື່ອມຕໍ່ Cloud
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => setShowConfigModal(true)}
+                        className="flex items-center justify-center px-4 py-3 bg-blue-50 border border-blue-200 hover:bg-blue-100 text-blue-700 rounded-xl font-bold transition-all text-xs"
+                      >
+                        <span className="mr-2"><IconCloud /></span>
+                        ເຊື່ອມຕໍ່ Cloud Sync
+                      </button>
+                    )}
+
+                    <button 
+                      onClick={exportAllToCSV}
+                      disabled={customers.length === 0}
+                      className={`flex items-center justify-center px-5 py-3 rounded-xl font-bold transition-all text-xs ${
+                        customers.length > 0 
+                          ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-md' 
+                          : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                      }`}
+                    >
+                      <span className="mr-2"><IconDownload /></span>
+                      ສົ່ງອອກລາຍງານ (Excel)
+                    </button>
+                  </div>
+                </header>
+
+                {/* METRICS ROW */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center space-x-4">
+                    <div className="p-3 bg-emerald-100 text-emerald-700 rounded-lg">
+                      <IconCalculator />
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase">ຍອດເງິນກູ້ປ່ອຍອອກທັງໝົດ</p>
+                      <h3 className="text-base font-extrabold text-slate-900">{formatLAK(financialSummary.totalPrincipalLoaned)}</h3>
+                      <p className="text-[10px] text-slate-500 font-bold">{customers.length} ສັນຍາ</p>
+                    </div>
+                  </div>
+
+                  <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center space-x-4">
+                    <div className="p-3 bg-amber-100 text-amber-700 rounded-lg">
+                      <IconPercent />
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase">ລາຍຮັບລວມ (ດອກເບ້ຍ + ຄ່າທຳນຽມ)</p>
+                      <h3 className="text-base font-extrabold text-slate-950">{formatLAK(financialSummary.netProfit)}</h3>
+                      <p className="text-[10px] text-amber-700 font-bold">
+                        ດອກເບ້ຍ: {formatLAK(financialSummary.totalExpectedInterest)}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center space-x-4">
+                    <div className="p-3 bg-blue-100 text-blue-700 rounded-lg">
+                      <IconCalendar />
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase">ເງິນສົດໃນຄັງ (Cash on Hand)</p>
+                      <h3 className="text-base font-extrabold text-blue-900">{formatLAK(financialSummary.cashOnHand)}</h3>
+                      <p className="text-[10px] text-slate-500 font-bold">ອັບເດດຈາກການຊຳລະຕົວຈິງ</p>
+                    </div>
+                  </div>
+
+                  <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center space-x-4">
+                    <div className="p-3 bg-purple-100 text-purple-700 rounded-lg">
+                      <IconUser />
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase">ຍອດເງິນກູ້ຄົງຄ້າງປັດຈຸບັນ</p>
+                      <h3 className="text-base font-extrabold text-purple-900">{formatLAK(financialSummary.activeOutstandingPortfolio)}</h3>
+                      <p className="text-[10px] text-slate-500 font-bold">ຕົ້ນທຶນທີ່ຍັງບໍ່ທັນເກັບຄືນ</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* MAIN GRID */}
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                  
+                  {/* LEFT AREA: FORMS & TRANSACTION REGISTER */}
+                  <div className="lg:col-span-5 space-y-6">
+                    
+                    {/* 1. NEW BORROWER FORM */}
+                    <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                      <h2 className="text-base font-bold mb-5 flex items-center text-slate-900 border-b pb-4">
+                        <span className="mr-2 text-emerald-500"><IconUser /></span> ເພີ່ມຜູ້ກູ້ໃໝ່
+                      </h2>
+                      
+                      <div className="space-y-4">
+                        <div className="space-y-4 bg-slate-50/70 p-4 rounded-xl border border-slate-100">
+                          <div>
+                            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">ຊື່ ແລະ ນາມສະກຸນ ຜູ້ກູ້ຢືມ</label>
+                            <input
+                              type="text" name="name" value={formData.name} onChange={handleInputChange}
+                              className="block w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 sm:text-xs bg-white font-bold"
+                              placeholder="ປ້ອນຊື່ເຕັມຜູ້ກູ້ຢືມ"
+                            />
+                          </div>
+                          
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">ເບີໂທລະສັບຕິດຕໍ່</label>
+                              <input
+                                type="tel" name="phone" value={formData.phone} onChange={handleInputChange}
+                                className="block w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 sm:text-xs bg-white font-bold"
+                                placeholder="020..."
+                              />
+                            </div>
+                            
+                            <div>
+                              <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">ວັນທີເລີ່ມສັນຍາ</label>
+                              <input
+                                type="date" name="startDate" value={formData.startDate} onChange={handleInputChange}
+                                className="block w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 sm:text-xs bg-white font-bold"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="pt-2 border-t border-slate-200 flex justify-between items-center text-xs">
+                            <span className="text-slate-500 font-bold">ວັນທີຄົບກຳນົດສັນຍາ:</span>
+                            <span className="font-extrabold text-emerald-800 tracking-wider bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-100">
+                              {liveEndDate}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div>
+                          <div className="flex justify-between items-center mb-1">
+                            <label className="block text-xs font-bold text-slate-700">ມູນຄ່າຕົ້ນທຶນປ່ອຍກູ້ (LAK)</label>
+                          </div>
+                          <input
+                            type="number" name="amount" value={formData.amount} onChange={handleInputChange}
+                            className="block w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 text-sm font-bold text-slate-900 bg-white"
+                            placeholder="ປ້ອນຈຳນວນເງິນກູ້"
+                          />
+                          {formData.amount && (
+                            <div className="text-right mt-1">
+                              <span className="text-xs font-extrabold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">
+                                {formatLAK(parseFloat(formData.amount))}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 mb-1">ຄ່າທຳນຽມເກັບກ່ອນ (LAK)</label>
+                          <input
+                            type="number" name="fee" value={formData.fee} onChange={handleInputChange}
+                            className="block w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 text-sm font-bold text-slate-900 bg-white"
+                            placeholder="ຄ່າທຳນຽມສັນຍາ"
+                          />
+                          {formData.fee && (
+                            <div className="text-right mt-1">
+                              <span className="text-xs font-extrabold text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
+                                {formatLAK(parseFloat(formData.fee))}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-[10px] font-bold text-slate-700 mb-1">ອັດຕາດອກເບ້ຍຕໍ່ປີ (%)</label>
+                            <input
+                              type="number" name="rate" value={formData.rate} onChange={handleInputChange} step="0.1"
+                              className="block w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 sm:text-xs bg-white font-extrabold text-slate-800"
+                            />
+                          </div>
+                          
+                          <div>
+                            <label className="block text-[10px] font-bold text-slate-700 mb-1">ໄລຍະເວລາສັນຍາ (ເດືອນ)</label>
+                            <input
+                              type="number" name="term" value={formData.term} onChange={handleInputChange}
+                              className="block w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 sm:text-xs bg-white font-extrabold text-slate-800"
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-700 mb-1.5">ວິທີການຄິດໄລ່ດອກເບ້ຍ</label>
+                          <div className="grid grid-cols-2 gap-3">
+                            <button
+                              onClick={() => handleTypeChange('reducing')}
+                              className={`flex flex-col items-center justify-center p-2.5 rounded-xl border transition-all ${
+                                formData.type === 'reducing' ? 'border-emerald-500 bg-emerald-50 text-emerald-700 font-bold' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                              }`}
+                            >
+                              <span className="text-[11px] font-bold">ຫຼຸດຕົ້ນຫຼຸດດອກ</span>
+                            </button>
+                            <button
+                              onClick={() => handleTypeChange('fixed')}
+                              className={`flex flex-col items-center justify-center p-2.5 rounded-xl border transition-all ${
+                                formData.type === 'fixed' ? 'border-emerald-500 bg-emerald-50 text-emerald-700 font-bold' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                              }`}
+                            >
+                              <span className="text-[11px] font-bold">ດອກເບ້ຍຄົງທີ່</span>
+                            </button>
+                          </div>
+                        </div>
+
+                        {livePreview && (
+                          <div className="mt-4 pt-4 border-t border-slate-200 space-y-3">
+                            <div className="bg-slate-900 text-white rounded-xl p-4 shadow-md space-y-2">
+                              <div className="flex justify-between items-center pb-1.5 border-b border-slate-800">
+                                <span className="text-slate-400 text-[10px] font-bold uppercase">ຄາດຄະເນຊຳລະຄືນຕໍ່ເດືອນ</span>
+                                <span className="text-sm font-bold text-emerald-400">{formatLAK(livePreview.monthlyPayment)}</span>
+                              </div>
+                              
+                              <div className="flex justify-between items-center text-[11px]">
+                                <span className="text-slate-400">ດອກເບ້ຍຄາດຄະເນທັງໝົດ</span>
+                                <span className="font-bold text-amber-300">{formatLAK(livePreview.totalInterest)}</span>
+                              </div>
+                              
+                              <div className="flex justify-between items-center text-[11px] pt-1 border-t border-slate-800">
+                                <span className="text-slate-400 font-bold">ຍອດຊຳລະລວມ (ຕົ້ນທຶນ + ດອກ)</span>
+                                <span className="font-bold text-white">{formatLAK(livePreview.totalRepayment)}</span>
+                              </div>
+                            </div>
+                            
+                            <button
+                              onClick={handleSaveCustomer}
+                              disabled={!formData.name.trim()}
+                              className={`w-full flex items-center justify-center py-2.5 rounded-xl font-bold text-xs transition-all ${
+                                !formData.name.trim() 
+                                  ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                                  : showSuccessMsg
+                                    ? 'bg-emerald-500 text-white'
+                                    : 'bg-slate-950 hover:bg-slate-850 text-white'
+                              }`}
+                            >
+                              {showSuccessMsg ? '✓ ບັນທຶກສັນຍາສຳເລັດແລ້ວ' : 'ບັນທຶກລົງປຶ້ມບັນຊີປະຈຳວັນ'}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* 2. OTHER INCOME & EXPENSES FORM */}
+                    <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                      <h2 className="text-base font-bold mb-4 flex items-center text-slate-900 border-b pb-4">
+                        <span className="mr-2 text-blue-500"><IconPlus /></span> ບັນທຶກລາຍຮັບ - ລາຍຈ່າຍອື່ນໆ
+                      </h2>
+                      
+                      <form onSubmit={handleAddOtherTransaction} className="space-y-4">
+                        <div className="grid grid-cols-2 gap-3">
+                          <button
+                            type="button"
+                            onClick={() => setOtherTransForm(prev => ({ ...prev, type: 'income' }))}
+                            className={`py-2 rounded-lg text-xs font-bold border transition-all ${
+                              otherTransForm.type === 'income' ? 'bg-emerald-50 border-emerald-500 text-emerald-700' : 'bg-white border-slate-200 text-slate-600'
+                            }`}
+                          >
+                            ລາຍຮັບອື່ນໆ (+)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setOtherTransForm(prev => ({ ...prev, type: 'expense' }))}
+                            className={`py-2 rounded-lg text-xs font-bold border transition-all ${
+                              otherTransForm.type === 'expense' ? 'bg-rose-50 border-rose-500 text-rose-700' : 'bg-white border-slate-200 text-slate-600'
+                            }`}
+                          >
+                            ລາຍຈ່າຍບໍລິຫານ (-)
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">ມູນຄ່າເງິນກີບ (LAK)</label>
+                            <input
+                              type="number"
+                              value={otherTransForm.amount}
+                              onChange={(e) => setOtherTransForm(prev => ({ ...prev, amount: e.target.value }))}
+                              className="block w-full px-3 py-1.5 border border-slate-300 rounded-lg sm:text-xs font-bold"
+                              placeholder="ປ້ອນມູນຄ່າ"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">ວັນທີບັນທຶກ</label>
+                            <input
+                              type="date"
+                              value={otherTransForm.date}
+                              onChange={(e) => setOtherTransForm(prev => ({ ...prev, date: e.target.value }))}
+                              className="block w-full px-3 py-1.5 border border-slate-300 rounded-lg sm:text-xs font-bold"
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">ຄຳອະທິບາຍທຸລະກຳ</label>
+                          <input
+                            type="text"
+                            value={otherTransForm.description}
+                            onChange={(e) => setOtherTransForm(prev => ({ ...prev, description: e.target.value }))}
+                            className="block w-full px-3 py-1.5 border border-slate-300 rounded-lg sm:text-xs font-semibold"
+                            placeholder="ລະບຸລາຍລະອຽດ ຫຼື ຈຸດປະສົງ"
+                          />
+                        </div>
+
+                        <button
+                          type="submit"
+                          disabled={!otherTransForm.amount || !otherTransForm.description.trim()}
+                          className={`w-full py-2.5 rounded-xl text-xs font-bold transition-all ${
+                            !otherTransForm.amount || !otherTransForm.description.trim()
+                              ? 'bg-slate-150 text-slate-400 cursor-not-allowed'
+                              : 'bg-blue-600 hover:bg-blue-700 text-white'
+                          }`}
+                        >
+                          # ບັນທຶກລາຍການທຸລະກຳ
+                        </button>
+                      </form>
+
+                      {/* 3. HISTORY OF OTHER TRANSACTIONS PLACED DIRECTLY BELOW */}
+                      <div className="mt-6 pt-5 border-t border-slate-200 space-y-3">
+                        <div className="flex justify-between items-center">
+                          <h3 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">
+                            ປະຫວັດລາຍຮັບ - ລາຍຈ່າຍອື່ນໆ
+                          </h3>
+                          <button
+                            onClick={() => setIsHistoryExpanded(!isHistoryExpanded)}
+                            className="text-[10px] font-bold text-blue-600 hover:underline"
+                          >
+                            {isHistoryExpanded ? 'ຫຍໍ້ລາຍການລົງ' : `ເບິ່ງທັງໝົດ (${otherTransactions.length})`}
+                          </button>
+                        </div>
+
+                        {visibleTransactions.length === 0 ? (
+                          <p className="text-xs text-slate-400 text-center py-2">ບໍ່ມີຂໍ້ມູນທຸລະກຳອື່ນໆ</p>
+                        ) : (
+                          <div className="space-y-2 max-h-[250px] overflow-y-auto">
+                            {visibleTransactions.map(t => (
+                              <div key={t.id} className="flex justify-between items-center p-2.5 rounded-lg border border-slate-100 bg-slate-50/50 text-xs">
+                                <div className="space-y-0.5">
+                                  <p className="font-bold text-slate-800">{t.description}</p>
+                                  <p className="text-[10px] text-slate-400 font-semibold">{t.date}</p>
+                                </div>
+                                <div className="flex items-center space-x-3">
+                                  <span className={`font-extrabold ${t.type === 'income' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                    {t.type === 'income' ? '+' : '-'}{formatLAK(t.amount)}
+                                  </span>
+                                  <button
+                                    onClick={() => handleDeleteOtherTransaction(t.id)}
+                                    className="text-slate-400 hover:text-rose-600 transition-all p-1 hover:bg-rose-50 rounded"
+                                  >
+                                    <IconTrash />
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                    </div>
+
+                  </div>
+
+                  {/* RIGHT AREA: CUSTOMER LISTS & FINANCIAL STATEMENT */}
+                  <div className="lg:col-span-7 space-y-6">
+                    
+                    {/* 1. LIST OF BORROWERS */}
+                    <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                      <h2 className="text-base font-bold mb-5 flex items-center text-slate-900 border-b pb-4">
+                        <span className="mr-2 text-emerald-600"><IconUser /></span> ລາຍຊື່ລູກຄ້າກູ້ຢືມ
+                      </h2>
+
+                      {customers.length === 0 ? (
+                        <div className="py-12 text-center text-slate-400 space-y-2">
+                          <IconUser />
+                          <p className="font-bold text-xs">ບໍ່ທັນມີຂໍ້ມູນລູກຄ້າກູ້ຢືມ</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          {customers.map((customer) => {
+                            const isExpanded = expandedCustomerId === customer.id;
+                            const paidCount = customer.results.schedule.filter(item => item.status === 'paid').length;
+                            const totalCount = customer.results.schedule.length;
+
+                            return (
+                              <div key={customer.id} className="border border-slate-200 rounded-xl p-4 shadow-sm hover:shadow-md transition-all relative">
+                                
+                                <button 
+                                  onClick={() => setCustomerToDelete(customer)}
+                                  className="absolute top-4 right-4 text-slate-400 hover:text-rose-600 p-1 rounded-lg hover:bg-rose-50"
+                                >
+                                  <IconTrash />
+                                </button>
+
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3 pb-3 border-b border-slate-100 pr-8">
+                                  <div>
+                                    <h4 className="font-bold text-slate-900 text-sm">{customer.name}</h4>
+                                    <p className="text-[10px] text-slate-500 flex flex-wrap items-center mt-1 gap-2">
+                                      <span className="flex items-center text-slate-600 font-semibold bg-slate-100 px-1.5 py-0.5 rounded">
+                                        <span className="mr-1"><IconPhone /></span> {customer.phone || '—'}
+                                      </span>
+                                      <span>ເລີ່ມ: {customer.startDate}</span>
+                                      <span className="text-emerald-700 font-semibold bg-emerald-50 px-1.5 py-0.5 rounded">
+                                        ຄົບກຳນົດ: {customer.endDate}
+                                      </span>
+                                    </p>
+                                  </div>
+                                  <div>
+                                    <span className={`inline-block px-2 py-0.5 text-[10px] font-bold rounded-lg ${
+                                      customer.type === 'reducing' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                                    }`}>
+                                      {customer.type === 'reducing' ? 'ຫຼຸດຕົ້ນຫຼຸດດອກ' : 'ດອກເບ້ຍຄົງທີ່'}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-[11px] pb-3 border-b border-slate-100/50">
+                                  <div>
+                                    <p className="text-slate-400 font-bold mb-0.5">ຕົ້ນທຶນປ່ອຍກູ້</p>
+                                    <p className="font-extrabold text-slate-900">{formatLAK(customer.amount)}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-slate-400 font-bold mb-0.5">ຄ່າທຳນຽມເກັບກ່ອນ</p>
+                                    <p className="font-extrabold text-blue-600">{formatLAK(customer.fee)}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-slate-400 font-bold mb-0.5">ດອກເບ້ຍ / ໄລຍະເວລາ</p>
+                                    <p className="font-bold text-slate-800">{customer.rate}% / {customer.term} ເດືອນ</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-slate-400 font-bold mb-0.5">ຄ່າຜ່ອນຊຳລະຕໍ່ເດືອນ</p>
+                                    <p className="font-extrabold text-blue-700">{formatLAK(customer.results.monthlyPayment)}</p>
+                                  </div>
+                                </div>
+
+                                {/* EXPANDABLE REPAYMENT GRID */}
+                                {isExpanded && (
+                                  <div className="mt-4 border border-slate-200 rounded-lg overflow-hidden max-h-60 overflow-y-auto">
+                                    <table className="w-full text-left text-xs border-collapse">
+                                      <thead>
+                                        <tr className="bg-slate-100 text-slate-500 font-bold text-[10px] border-b border-slate-200">
+                                          <th className="py-2 px-3 text-center">ງວດ</th>
+                                          <th className="py-2 px-3 text-center">ກຳນົດຊຳລະ</th>
+                                          <th className="py-2 px-3 text-right">ຍອດຊຳລະ</th>
+                                          <th className="py-2 px-3 text-right">ຕົ້ນທຶນ</th>
+                                          <th className="py-2 px-3 text-right">ດອກເບ້ຍ</th>
+                                          <th className="py-2 px-3 text-center">ການຊຳລະ</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-slate-100 text-slate-700 bg-white">
+                                        {customer.results.schedule.map((row) => (
+                                          <tr key={row.month} className="hover:bg-slate-50/50">
+                                            <td className="py-2 px-3 text-center font-bold text-slate-500">{row.month}</td>
+                                            <td className="py-2 px-3 text-center font-bold text-blue-700">{row.paymentDate}</td>
+                                            <td className="py-2 px-3 text-right font-bold text-slate-900">{formatLAK(row.payment)}</td>
+                                            <td className="py-2 px-3 text-right text-emerald-600 font-bold">{formatLAK(row.principalPayment)}</td>
+                                            <td className="py-2 px-3 text-right text-amber-600 font-bold">{formatLAK(row.interestPayment)}</td>
+                                            <td className="py-2 px-3 text-center">
+                                              <button
+                                                onClick={() => toggleInstallmentStatus(customer.id, row.month)}
+                                                className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all ${
+                                                  row.status === 'paid'
+                                                    ? 'bg-emerald-100 text-emerald-800'
+                                                    : 'bg-rose-100 text-rose-800 hover:bg-rose-200'
+                                                }`}
+                                              >
+                                                {row.status === 'paid' ? '✓ ຊຳລະແລ້ວ' : 'ໝາຍວ່າຊຳລະ'}
+                                              </button>
+                                            </td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                )}
+
+                                <div className="pt-3 flex flex-wrap gap-2 justify-between items-center">
+                                  <div className="flex gap-2">
+                                    <button
+                                      onClick={() => setExpandedCustomerId(isExpanded ? null : customer.id)}
+                                      className="text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg"
+                                    >
+                                      {isExpanded ? 'ຫຍໍ້ຕາຕະລາງ' : 'ຂະຫຍາຍຕາຕະລາງ'}
+                                    </button>
+                                    <button
+                                      onClick={() => printSingleCustomerSchedule(customer)}
+                                      className="text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg flex items-center"
+                                    >
+                                      <span className="mr-1"><IconPrinter /></span> ພິມສັນຍາ
+                                    </button>
+                                  </div>
+                                  <span className="text-[10px] text-slate-400 font-bold">
+                                    ຊຳລະແລ້ວ {paidCount}/{totalCount} ງວດ
+                                  </span>
+                                </div>
+
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 2. DOUBLE ENTRY BALANCE SHEET & STATEMENTS */}
+                    <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+                      <div className="bg-slate-900 text-white p-4 font-bold text-sm uppercase tracking-wider flex justify-between items-center px-6">
+                        <span>ບົດສະຫຼຸບຖານະການເງິນ ແລະ ງົບດຸນ (Balance Sheet)</span>
+                        <button 
+                          onClick={printFinancialStatement}
+                          className="bg-white hover:bg-slate-150 text-slate-900 rounded-lg px-3 py-1.5 font-extrabold text-xs flex items-center transition-all shadow"
+                        >
+                          <span className="mr-1"><IconPrinter /></span> ພິມລາຍງານ
+                        </button>
+                      </div>
+
+                      {/* TWO COLUMN GRID: ASSETS on Left, LIABILITIES & EQUITY on Right */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-200 text-xs">
+                        
+                        {/* LEFT SIDE: ASSETS */}
+                        <div className="p-4 space-y-3">
+                          <h5 className="font-extrabold text-slate-900 border-b pb-1.5 text-xs uppercase flex justify-between">
+                            <span>1. ຊັບສິນ (ASSETS)</span>
+                            <span className="text-emerald-700">ເດບິດ (+)</span>
+                          </h5>
+                          
+                          <div className="space-y-2">
+                            <div className="flex justify-between items-center">
+                              <span className="text-slate-500 font-medium">ເງິນສົດໃນຄັງ (Cash on Hand)</span>
+                              <span className="font-bold text-slate-900">{formatLAK(financialSummary.cashOnHand)}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-slate-500 font-medium">ຍອດເງິນກູ້ຄົງຄ້າງ (Outstanding Portfolio)</span>
+                              <span className="font-bold text-slate-900">{formatLAK(financialSummary.activeOutstandingPortfolio)}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-slate-500 font-medium">ດອກເບ້ຍຄ້າງຮັບ (Interest Receivable)</span>
+                              <span className="font-bold text-slate-900">{formatLAK(financialSummary.interestReceivable)}</span>
+                            </div>
+                          </div>
+
+                          <div className="pt-2 border-t border-slate-200 flex justify-between items-center text-slate-950 font-extrabold text-sm bg-slate-50 p-2 rounded">
+                            <span>ລວມຊັບສິນທັງໝົດ</span>
+                            <span className="text-emerald-800">{formatLAK(financialSummary.totalAssets)}</span>
+                          </div>
+                        </div>
+
+                        {/* RIGHT SIDE: LIABILITIES & EQUITY */}
+                        <div className="p-4 space-y-3">
+                          <h5 className="font-extrabold text-slate-900 border-b pb-1.5 text-xs uppercase flex justify-between">
+                            <span>2-3. ໜີ້ສິນ & ທຶນ (LIABILITIES & EQUITY)</span>
+                            <span className="text-blue-700">ເຄຣດິດ (-)</span>
+                          </h5>
+                          
+                          <div className="space-y-2">
+                            <div className="font-bold text-slate-700 uppercase text-[9px] mb-1">2. ໜີ້ສິນ (Liabilities):</div>
+                            <div className="flex justify-between items-center pl-2">
+                              <span>ເງິນກູ້ຢືມພາຍນອກ</span>
+                              <input 
+                                type="number" 
+                                value={ownerLiabilities} 
+                                onChange={(e) => updateLiabilitiesLocalOrCloud(Math.max(0, parseFloat(e.target.value) || 0))}
+                                className="w-24 px-2 py-0.5 border border-slate-300 rounded font-bold text-right"
+                              />
+                            </div>
+                            
+                            <div className="font-bold text-slate-700 uppercase text-[9px] pt-2 border-t border-slate-100 mb-1">3. ສ່ວນຂອງເຈົ້າຂອງ (Capital/Equity):</div>
+                            <div className="flex justify-between items-center pl-2">
+                              <span>ທຶນເລີ່ມຕົ້ນ</span>
+                              <input 
+                                type="number" 
+                                value={ownerCapital} 
+                                onChange={(e) => updateCapitalLocalOrCloud(Math.max(0, parseFloat(e.target.value) || 0))}
+                                className="w-24 px-2 py-0.5 border border-slate-300 rounded font-bold text-right"
+                              />
+                            </div>
+                            <div className="flex justify-between items-center pl-2">
+                              <span className="text-slate-500 font-medium">ລາຍຮັບສະສົມສຸທິ</span>
+                              <span className="font-bold text-emerald-600">{formatLAK(financialSummary.netProfit)}</span>
+                            </div>
+                          </div>
+
+                          <div className="pt-2 border-t border-slate-200 flex justify-between items-center text-slate-950 font-extrabold text-sm bg-slate-50 p-2 rounded">
+                            <span>ລວມໜີ້ສິນ ແລະ ທຶນ</span>
+                            <span className="text-blue-800">{formatLAK(financialSummary.totalLiabilitiesAndEquity)}</span>
+                          </div>
+                        </div>
+
+                      </div>
+
+                      {/* LOWER ROW: INCOME on Left, EXPENSES on Right */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-200 text-xs border-t border-slate-200 bg-slate-50/50">
+                        
+                        {/* LOWER LEFT: REVENUE */}
+                        <div className="p-4 space-y-2">
+                          <h6 className="font-extrabold text-slate-700 uppercase text-[10px] tracking-wider mb-1.5 flex justify-between">
+                            <span>5. ລາຍຮັບສະສົມ (OPERATIONAL INCOME)</span>
+                            <span className="text-emerald-700 font-bold">ເຄຣດິດ (+)</span>
+                          </h6>
+                          <div className="space-y-1.5">
+                            <div className="flex justify-between">
+                              <span className="text-slate-500">ລາຍຮັບດອກເບ້ຍຄ້າງຮັບ</span>
+                              <span className="font-bold">{formatLAK(financialSummary.totalExpectedInterest)}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-500">ຄ່າທຳນຽມສັນຍາ</span>
+                              <span className="font-bold text-blue-600">{formatLAK(financialSummary.totalFeesCollected)}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-500">ລາຍຮັບນອກສັນຍາອື່ນໆ</span>
+                              <span className="font-bold text-emerald-600">+{formatLAK(financialSummary.totalOtherIncome)}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* LOWER RIGHT: EXPENSE */}
+                        <div className="p-4 space-y-2">
+                          <h6 className="font-extrabold text-slate-700 uppercase text-[10px] tracking-wider mb-1.5 flex justify-between">
+                            <span>4. ລາຍຈ່າຍບໍລິຫານ (OPERATIONAL EXPENSES)</span>
+                            <span className="text-rose-700 font-bold">ເດບິດ (-)</span>
+                          </h6>
+                          <div className="space-y-1.5">
+                            <div className="flex justify-between">
+                              <span className="text-slate-500">ລາຍຈ່າຍບໍລິຫານ ແລະ ອື່ນໆ</span>
+                              <span className="font-bold text-rose-600">-{formatLAK(financialSummary.totalOtherExpenses)}</span>
+                            </div>
+                            <div className="text-[10px] text-slate-400 font-semibold leading-relaxed pt-1.5 border-t border-slate-200/50">
+                              * ຕົ້ນທຶນປ່ອຍກູ້ບໍ່ນັບເປັນລາຍຈ່າຍ ເພາະຖືກປ່ຽນເປັນຊັບສິນລູກໜີ້ (Outstanding Receivable) ຕາມຫຼັກການບັນຊີສາກົນ.
+                            </div>
+                          </div>
+                        </div>
+
+                      </div>
+
+                      {/* STATUTORY DOUBLE ENTRY STATUS ALIGNMENT */}
+                      <div className="bg-slate-100 p-3 flex flex-col sm:flex-row justify-between items-center text-[11px] font-bold text-slate-600 gap-2 border-t border-slate-200">
+                        <span className="flex items-center text-slate-700">
+                          <span className="mr-1.5 text-emerald-600"><IconCheck /></span>
+                          ສົມຜົນບັນຊີ (Accounting Balance Equation):
+                        </span>
+                        <span className="bg-white px-3 py-0.5 rounded-full border border-slate-200 text-emerald-700 shadow-sm font-extrabold">
+                          ຊັບສິນທັງໝົດ = ໜີ້ສິນ + ສ່ວນຂອງເຈົ້າຂອງ (ດຸນດ່ຽງ 100%)
+                        </span>
+                      </div>
+                    </div>
+
+                  </div>
+
+                </div>
+              </div>
+            </div>
+          );
+        }
+
+        // Render React Application
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
