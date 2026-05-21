@@ -271,27 +271,29 @@
            STREAMING_CHUNK:Initializing application state...
            ========================================== */
         function App() {
-          // Dynamic Firebase Configuration state (Loads from localStorage to enable multi-device sync easily)
+          // Dynamic Firebase Configuration state
           const [fbConfig, setFbConfig] = useState(() => {
             const saved = localStorage.getItem('sme_lender_firebase_config');
             return saved ? JSON.parse(saved) : null;
           });
 
           const [firebaseConnected, setFirebaseConnected] = useState(false);
+          const [connectionError, setConnectionError] = useState(null);
           const [showConfigModal, setShowConfigModal] = useState(false);
           
           // Temporary fields for configuration modal
-const firebaseConfig = {
-  apiKey: "AIzaSyCkt-XWSNkojyWoiApDXpBNyO0h_i7kw_Q",
-  authDomain: "sme-lender-by-art.firebaseapp.com",
-  databaseURL: "https://sme-lender-by-art-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "sme-lender-by-art",
-  storageBucket: "sme-lender-by-art.firebasestorage.app",
-  messagingSenderId: "582313757461",
-  appId: "1:582313757461:web:12cbd1f6c28cfb4c7d771c",
-  measurementId: "G-Q9WNVSJ8V4"
-};
-          // State variables (Will automatically sync with Firebase if configured, otherwise falls back to localStorage)
+          const [tempConfig, setTempConfig] = useState({
+            apiKey: "AIzaSyCkt-XWSNkojyWoiApDXpBNyO0h_i7kw_Q",
+            authDomain: "sme-lender-by-art.firebaseapp.com",
+            databaseURL: "https://sme-lender-by-art-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "sme-lender-by-art",
+            storageBucket: "sme-lender-by-art.firebasestorage.app",
+            messagingSenderId: "582313757461",
+            appId: "1:582313757461:web:12cbd1f6c28cfb4c7d771c",
+            measurementId: "G-Q9WNVSJ8V4"
+          });
+
+          // State variables
           const [customers, setCustomers] = useState([]);
           const [otherTransactions, setOtherTransactions] = useState([]);
           const [ownerCapital, setOwnerCapital] = useState(500000000); 
@@ -322,11 +324,11 @@ const firebaseConfig = {
           });
 
           /* ==========================================
-             STREAMING_CHUNK:Firebase Initialization & Sync Loop...
+             STREAMING_CHUNK:Firebase Initialization & Robust Connection Diagnostics...
              ========================================== */
           useEffect(() => {
             if (!fbConfig) {
-              // Local fallback fallback
+              // Local Storage Fallback Mode
               const localCust = localStorage.getItem('sme_local_customers');
               const localTrans = localStorage.getItem('sme_local_transactions');
               const localCap = localStorage.getItem('sme_local_capital');
@@ -334,7 +336,7 @@ const firebaseConfig = {
 
               if (localCust) setCustomers(JSON.parse(localCust));
               else {
-                // Initial Default Demo Data if completely empty
+                // Default Initial Demo Data
                 setCustomers([
                   {
                     id: 'demo-1',
@@ -364,61 +366,107 @@ const firebaseConfig = {
               if (localLiab) setOwnerLiabilities(parseFloat(localLiab));
               
               setFirebaseConnected(false);
+              setConnectionError(null);
               return;
             }
 
-            // Initialize Firebase App
+            // Initialize Firebase App securely
+            let app;
+            let connectedListener;
+            let customersListener;
+            let transListener;
+            let capitalListener;
+            let liabilitiesListener;
+
             try {
-              let app;
+              if (!fbConfig.databaseURL || fbConfig.databaseURL.trim() === "") {
+                throw new Error("ກະລຸນາປ້ອນ 'Database URL' ໃນ Firebase Config. ຫາກບໍ່ມີ Database URL ຈະບໍ່ສາມາດເຊື່ອມຕໍ່ຖານຂໍ້ມູນໄດ້.");
+              }
+
               if (!firebase.apps.length) {
                 app = firebase.initializeApp(fbConfig);
               } else {
                 app = firebase.app();
               }
+              
               const db = app.database();
-              setFirebaseConnected(true);
+              setConnectionError("ກຳລັງກວດສອບການເຊື່ອມຕໍ່ຫາ Cloud Server...");
 
-              // Setup Real-time Listeners
-              const customersRef = db.ref('customers');
-              customersRef.on('value', (snapshot) => {
-                const val = snapshot.val();
-                setCustomers(val ? Object.values(val) : []);
+              // 1. Listen directly to Real-time database connection state metadata node
+              const connectedRef = db.ref(".info/connected");
+              connectedListener = connectedRef.on('value', (snap) => {
+                const isConnected = snap.val() === true;
+                setFirebaseConnected(isConnected);
+                if (isConnected) {
+                  setConnectionError(null);
+                } else {
+                  setConnectionError("ກຳລັງພະຍາຍາມເຊື່ອມຕໍ່ຫາຄລາວ... (ກວດສອບອິນເຕີເນັດຂອງທ່ານ)");
+                }
               });
+
+              // 2. Setup Database Queries & listen to data sync with permission-denied error catchers
+              const customersRef = db.ref('customers');
+              customersListener = customersRef.on('value', 
+                (snapshot) => {
+                  const val = snapshot.val();
+                  setCustomers(val ? Object.values(val) : []);
+                },
+                (error) => {
+                  console.error("Firebase read customers blocked:", error);
+                  setConnectionError(`ຖືກປະຕິເສດການເຂົ້າເຖິງ: ${error.message}. ກະລຸນາກວດສອບ Rules ຂອງ Database ໃນ Firebase Console ໃຫ້ເປັນ true ພາຍໃຕ້ແທັບ Rules.`);
+                }
+              );
 
               const transRef = db.ref('otherTransactions');
-              transRef.on('value', (snapshot) => {
-                const val = snapshot.val();
-                setOtherTransactions(val ? Object.values(val) : []);
-              });
+              transListener = transRef.on('value', 
+                (snapshot) => {
+                  const val = snapshot.val();
+                  setOtherTransactions(val ? Object.values(val) : []);
+                },
+                (error) => {
+                  console.error("Firebase read transactions blocked:", error);
+                }
+              );
 
               const capitalRef = db.ref('ownerCapital');
-              capitalRef.on('value', (snapshot) => {
-                const val = snapshot.val();
-                if (val !== null) setOwnerCapital(val);
-              });
+              capitalListener = capitalRef.on('value', 
+                (snapshot) => {
+                  const val = snapshot.val();
+                  if (val !== null) setOwnerCapital(val);
+                },
+                (error) => {}
+              );
 
               const liabilitiesRef = db.ref('ownerLiabilities');
-              liabilitiesRef.on('value', (snapshot) => {
-                const val = snapshot.val();
-                if (val !== null) setOwnerLiabilities(val);
-              });
-
-              // Clean up listeners on unmount or config changes
-              return () => {
-                customersRef.off();
-                transRef.off();
-                capitalRef.off();
-                liabilitiesRef.off();
-              };
+              liabilitiesListener = liabilitiesRef.on('value', 
+                (snapshot) => {
+                  const val = snapshot.val();
+                  if (val !== null) setOwnerLiabilities(val);
+                },
+                (error) => {}
+              );
 
             } catch (err) {
-              console.error("Firebase connection error: ", err);
+              console.error("Firebase Boot Error:", err);
               setFirebaseConnected(false);
+              setConnectionError(`ຂໍ້ຜິດພາດ: ${err.message}`);
             }
+
+            // Cleanup listeners on config update or component unmount
+            return () => {
+              if (app) {
+                const db = app.database();
+                if (connectedListener) db.ref(".info/connected").off('value', connectedListener);
+                if (customersListener) db.ref('customers').off('value', customersListener);
+                if (transListener) db.ref('otherTransactions').off('value', transListener);
+                if (capitalListener) db.ref('ownerCapital').off('value', capitalListener);
+                if (liabilitiesListener) db.ref('ownerLiabilities').off('value', liabilitiesListener);
+              }
+            };
 
           }, [fbConfig]);
 
-          // Sync local data to LocalStorage if Firebase is offline
+          // Local Sync backups in case Firebase is offline
           useEffect(() => {
             if (!firebaseConnected) {
               localStorage.setItem('sme_local_customers', JSON.stringify(customers));
@@ -594,6 +642,7 @@ const firebaseConfig = {
             localStorage.removeItem('sme_lender_firebase_config');
             setFbConfig(null);
             setFirebaseConnected(false);
+            setConnectionError(null);
           };
 
           /* ==========================================
@@ -1184,32 +1233,49 @@ const firebaseConfig = {
           return (
             <div className="min-h-screen bg-slate-50 text-slate-850 p-4 md:p-6 font-sans antialiased">
               
-              {/* FIREBASE CONFIGURATION SETUP MODAL */}
+              {/* ADVANCED FIREBASE DIAGNOSTIC CONFIGURATION MODAL */}
               {showConfigModal && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                  <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden">
+                  <div className="bg-white rounded-2xl max-w-xl w-full shadow-2xl border border-slate-200 overflow-hidden">
                     <form onSubmit={handleSaveFirebaseConfig}>
                       <div className="p-6 space-y-4">
                         <div className="flex items-center space-x-3 text-blue-600 border-b pb-3">
                           <IconCloud />
                           <h3 className="text-lg font-bold text-slate-900">ຕັ້ງຄ່າເຊື່ອມຕໍ່ລະບົບ Cloud Sync (Firebase)</h3>
                         </div>
-                        <p className="text-xs text-slate-500 leading-relaxed font-semibold">
-                          ປ້ອນຄ່າ Web Config ທີ່ໄດ້ມາຈາກ Firebase Console ຂອງທ່ານ ເພື່ອເຊື່ອມຕໍ່ຂໍ້ມູນໄປຍັງ Cloud ໃຫ້ສາມາດເຂົ້າເຖິງ ແລະ ຊິງຄ໌ຂໍ້ມູນໄດ້ໃນທຸກອຸປະກອນ.
-                        </p>
+                        
+                        {/* Interactive Tutorial Guides for Owners */}
+                        <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl space-y-2 text-xs text-blue-800 leading-relaxed font-semibold">
+                          <p className="font-bold text-sm text-blue-900">💡 ວິທີຫາຄ່າ Config ແລະ ແກ້ໄຂບັນຫາ Offline:</p>
+                          <ul className="list-decimal pl-4 space-y-1">
+                            <li><strong>ສໍາຄັນທີ່ສຸດ:</strong> ທ່ານຕ້ອງປ້ອນ <strong className="text-rose-700">Database URL</strong> ໃຫ້ຖືກຕ້ອງ. ຖ້າບໍ່ປ້ອນ ລະບົບຈະຂຶ້ນ Offline ຕະຫຼອດໄປ.</li>
+                            <li>ກັອບປີ້ Database URL ຈາກໜ້າ **Realtime Database** ຂອງ Firebase (ຕົວຢ່າງ: <code className="bg-white px-1 py-0.5 rounded border">https://yourproject-rtdb.firebaseio.com</code>).</li>
+                            <li><strong>ຕັ້ງຄ່າ Rules:</strong> ເຂົ້າໄປແທັບ **Rules** ໃນ Firebase Realtime Database ແລ້ວປ່ຽນ <code className="bg-white px-1 py-0.5 rounded border">".read"</code> ແລະ <code className="bg-white px-1 py-0.5 rounded border">".write"</code> ໃຫ້ເປັນ <code className="bg-white px-1 text-emerald-700 py-0.5 rounded border font-bold">true</code> ເພື່ອອະນຸຍາດໃຫ້ເຊື່ອມຕໍ່.</li>
+                          </ul>
+                        </div>
                         
                         <div className="space-y-3 text-xs">
                           <div>
-                            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">API Key</label>
+                            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Database URL (ຕ້ອງໃສ່ໃຫ້ຖືກຕ້ອງ - ຫ້າມຫວ່າງເປົ່າ)</label>
                             <input
                               type="text" required
-                              value={tempConfig.apiKey}
-                              onChange={(e) => setTempConfig({...tempConfig, apiKey: e.target.value})}
-                              className="block w-full px-3 py-1.5 border border-slate-300 rounded-lg sm:text-xs"
-                              placeholder="AIzaSy..."
+                              value={tempConfig.databaseURL}
+                              onChange={(e) => setTempConfig({...tempConfig, databaseURL: e.target.value})}
+                              className="block w-full px-3 py-1.5 border border-slate-300 rounded-lg sm:text-xs font-bold text-blue-700 bg-blue-50/20"
+                              placeholder="https://your-project-id-default-rtdb.firebaseio.com"
                             />
                           </div>
                           <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">API Key</label>
+                              <input
+                                type="text" required
+                                value={tempConfig.apiKey}
+                                onChange={(e) => setTempConfig({...tempConfig, apiKey: e.target.value})}
+                                className="block w-full px-3 py-1.5 border border-slate-300 rounded-lg sm:text-xs"
+                                placeholder="AIzaSy..."
+                              />
+                            </div>
                             <div>
                               <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Auth Domain</label>
                               <input
@@ -1218,16 +1284,6 @@ const firebaseConfig = {
                                 onChange={(e) => setTempConfig({...tempConfig, authDomain: e.target.value})}
                                 className="block w-full px-3 py-1.5 border border-slate-300 rounded-lg sm:text-xs"
                                 placeholder="your-app.firebaseapp.com"
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Database URL</label>
-                              <input
-                                type="text" required
-                                value={tempConfig.databaseURL}
-                                onChange={(e) => setTempConfig({...tempConfig, databaseURL: e.target.value})}
-                                className="block w-full px-3 py-1.5 border border-slate-300 rounded-lg sm:text-xs"
-                                placeholder="https://your-app.firebaseio.com"
                               />
                             </div>
                           </div>
@@ -1342,7 +1398,18 @@ const firebaseConfig = {
                       </button>
                     ) : (
                       <button
-                        onClick={() => setShowConfigModal(true)}
+                        onClick={() => {
+                          setTempConfig(fbConfig || {
+                            apiKey: '',
+                            authDomain: '',
+                            databaseURL: '',
+                            projectId: '',
+                            storageBucket: '',
+                            messagingSenderId: '',
+                            appId: ''
+                          });
+                          setShowConfigModal(true);
+                        }}
                         className="flex items-center justify-center px-4 py-3 bg-blue-50 border border-blue-200 hover:bg-blue-100 text-blue-700 rounded-xl font-bold transition-all text-xs"
                       >
                         <span className="mr-2"><IconCloud /></span>
@@ -1364,6 +1431,17 @@ const firebaseConfig = {
                     </button>
                   </div>
                 </header>
+
+                {/* CONNECTION ERROR DIAGNOSTICS ALERTS */}
+                {connectionError && (
+                  <div className="bg-rose-50 border-l-4 border-rose-500 p-4 rounded-xl text-rose-800 text-xs font-semibold leading-relaxed shadow-sm">
+                    <p className="font-bold text-sm text-rose-900 mb-1">⚠ ກວດພົບຂໍ້ຜິດພາດໃນການເຊື່ອມຕໍ່ Cloud:</p>
+                    <p>{connectionError}</p>
+                    <div className="mt-2 text-[10px] text-rose-600">
+                      * ວິທີແກ້ໄຂ: 1) ກວດສອບວ່າທ່ານໄດ້ປ້ອນ Database URL ຫຼື ບໍ່, 2) ເປີດ Security Rules ຂອງ Realtime Database ໃຫ້ເປັນ true, 3) ກວດສອບສັນຍານອິນເຕີເນັດ.
+                    </div>
+                  </div>
+                )}
 
                 {/* METRICS ROW */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -1398,7 +1476,7 @@ const firebaseConfig = {
                     <div>
                       <p className="text-[10px] font-bold text-slate-400 uppercase">ເງິນສົດໃນຄັງ (Cash on Hand)</p>
                       <h3 className="text-base font-extrabold text-blue-900">{formatLAK(financialSummary.cashOnHand)}</h3>
-                      <p className="text-[10px] text-slate-500 font-bold">ອັບເດດຈາກການຊຳລະຕົວຈິງ</p>
+                      <p className="text-[10px] text-slate-500 font-bold font-sans">ອັບເດດຈາກການຊຳລະຕົວຈິງ</p>
                     </div>
                   </div>
 
@@ -1984,7 +2062,7 @@ const firebaseConfig = {
           );
         }
 
-        // Render React Application
+        // Render React Application securely
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);
     </script>
