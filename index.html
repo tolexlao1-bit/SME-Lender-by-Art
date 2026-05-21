@@ -281,16 +281,16 @@
           const [showConfigModal, setShowConfigModal] = useState(false);
           
           // Temporary fields for configuration modal
-    const firebaseConfig = {
+const firebaseConfig = {
   apiKey: "AIzaSyCkt-XWSNkojyWoiApDXpBNyO0h_i7kw_Q",
   authDomain: "sme-lender-by-art.firebaseapp.com",
+  databaseURL: "https://sme-lender-by-art-default-rtdb.asia-southeast1.firebasedatabase.app",
   projectId: "sme-lender-by-art",
   storageBucket: "sme-lender-by-art.firebasestorage.app",
   messagingSenderId: "582313757461",
   appId: "1:582313757461:web:12cbd1f6c28cfb4c7d771c",
   measurementId: "G-Q9WNVSJ8V4"
 };
-
           // State variables (Will automatically sync with Firebase if configured, otherwise falls back to localStorage)
           const [customers, setCustomers] = useState([]);
           const [otherTransactions, setOtherTransactions] = useState([]);
