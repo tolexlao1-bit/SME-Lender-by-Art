@@ -271,10 +271,22 @@
            STREAMING_CHUNK:Initializing application state...
            ========================================== */
         function App() {
-          // Dynamic Firebase Configuration state
+          // Dynamic Firebase Configuration state (Configured to connect online immediately by default)
           const [fbConfig, setFbConfig] = useState(() => {
             const saved = localStorage.getItem('sme_lender_firebase_config');
-            return saved ? JSON.parse(saved) : null;
+            if (saved) return JSON.parse(saved);
+            
+            // Your default online configuration (connects immediately)
+            return {
+              apiKey: "AIzaSyCkt-XWSNkojyWoiApDXpBNyO0h_i7kw_Q",
+              authDomain: "sme-lender-by-art.firebaseapp.com",
+              databaseURL: "https://sme-lender-by-art-default-rtdb.asia-southeast1.firebasedatabase.app",
+              projectId: "sme-lender-by-art",
+              storageBucket: "sme-lender-by-art.firebasestorage.app",
+              messagingSenderId: "582313757461",
+              appId: "1:582313757461:web:12cbd1f6c28cfb4c7d771c",
+              measurementId: "G-Q9WNVSJ8V4"
+            };
           });
 
           const [firebaseConnected, setFirebaseConnected] = useState(false);
