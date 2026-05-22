@@ -43,7 +43,7 @@
         }
     </style>
 </head>
-<body class="bg-slate-100 text-slate-800">
+<body class="bg-slate-50 text-slate-800">
 
     <div id="root"></div>
 
@@ -271,30 +271,8 @@
            STREAMING_CHUNK:Initializing application state...
            ========================================== */
         function App() {
-          // Dynamic Firebase Configuration state (Configured to connect online immediately by default)
-          const [fbConfig, setFbConfig] = useState(() => {
-            const saved = localStorage.getItem('sme_lender_firebase_config');
-            if (saved) return JSON.parse(saved);
-            
-            // Your default online configuration (connects immediately)
-            return {
-              apiKey: "AIzaSyCkt-XWSNkojyWoiApDXpBNyO0h_i7kw_Q",
-              authDomain: "sme-lender-by-art.firebaseapp.com",
-              databaseURL: "https://sme-lender-by-art-default-rtdb.asia-southeast1.firebasedatabase.app",
-              projectId: "sme-lender-by-art",
-              storageBucket: "sme-lender-by-art.firebasestorage.app",
-              messagingSenderId: "582313757461",
-              appId: "1:582313757461:web:12cbd1f6c28cfb4c7d771c",
-              measurementId: "G-Q9WNVSJ8V4"
-            };
-          });
-
-          const [firebaseConnected, setFirebaseConnected] = useState(false);
-          const [connectionError, setConnectionError] = useState(null);
-          const [showConfigModal, setShowConfigModal] = useState(false);
-          
-          // Temporary fields for configuration modal
-          const [tempConfig, setTempConfig] = useState({
+          // Default Cloud Sync Configurations
+          const DEFAULT_FIREBASE_CONFIG = {
             apiKey: "AIzaSyCkt-XWSNkojyWoiApDXpBNyO0h_i7kw_Q",
             authDomain: "sme-lender-by-art.firebaseapp.com",
             databaseURL: "https://sme-lender-by-art-default-rtdb.asia-southeast1.firebasedatabase.app",
@@ -303,7 +281,23 @@
             messagingSenderId: "582313757461",
             appId: "1:582313757461:web:12cbd1f6c28cfb4c7d771c",
             measurementId: "G-Q9WNVSJ8V4"
+          };
+
+          // Primary Tab Control State
+          const [activeTab, setActiveTab] = useState('ledger');
+
+          const [fbConfig, setFbConfig] = useState(() => {
+            const saved = localStorage.getItem('sme_lender_firebase_config');
+            if (saved) return JSON.parse(saved);
+            return DEFAULT_FIREBASE_CONFIG;
           });
+
+          const [firebaseConnected, setFirebaseConnected] = useState(false);
+          const [connectionError, setConnectionError] = useState(null);
+          const [showConfigModal, setShowConfigModal] = useState(false);
+          
+          // Temporary fields for configuration modal
+          const [tempConfig, setTempConfig] = useState(fbConfig);
 
           // State variables
           const [customers, setCustomers] = useState([]);
@@ -336,53 +330,50 @@
           });
 
           /* ==========================================
+           STREAMING_CHUNK:Setting up BroadcastChannel for local tab synchronization...
+           ========================================== */
+          useEffect(() => {
+            const syncChannel = new BroadcastChannel('sme_lender_local_tab_sync');
+            
+            syncChannel.onmessage = (event) => {
+              const { type, payload } = event.data;
+              if (type === 'SYNC_ALL_DATA' && !firebaseConnected) {
+                if (payload.customers) setCustomers(payload.customers);
+                if (payload.otherTransactions) setOtherTransactions(payload.otherTransactions);
+                if (payload.ownerCapital !== undefined) setOwnerCapital(payload.ownerCapital);
+                if (payload.ownerLiabilities !== undefined) setOwnerLiabilities(payload.ownerLiabilities);
+              }
+            };
+
+            return () => {
+              syncChannel.close();
+            };
+          }, [firebaseConnected]);
+
+          const broadcastLocalSync = (updatedCustomers, updatedTransactions, capital, liabilities) => {
+            const syncChannel = new BroadcastChannel('sme_lender_local_tab_sync');
+            syncChannel.postMessage({
+              type: 'SYNC_ALL_DATA',
+              payload: {
+                customers: updatedCustomers,
+                otherTransactions: updatedTransactions,
+                ownerCapital: capital,
+                ownerLiabilities: liabilities
+              }
+            });
+          };
+
+          /* ==========================================
              STREAMING_CHUNK:Firebase Initialization & Robust Connection Diagnostics...
              ========================================== */
           useEffect(() => {
             if (!fbConfig) {
-              // Local Storage Fallback Mode
-              const localCust = localStorage.getItem('sme_local_customers');
-              const localTrans = localStorage.getItem('sme_local_transactions');
-              const localCap = localStorage.getItem('sme_local_capital');
-              const localLiab = localStorage.getItem('sme_local_liabilities');
-
-              if (localCust) setCustomers(JSON.parse(localCust));
-              else {
-                // Default Initial Demo Data
-                setCustomers([
-                  {
-                    id: 'demo-1',
-                    name: 'ສົມຊິດ ພັດທະນາ',
-                    phone: '02055567812',
-                    startDate: '2026-05-19',
-                    amount: 25000000,
-                    rate: 10,
-                    term: 6,
-                    type: 'reducing',
-                    fee: 250000,
-                    endDate: '2026-11-19',
-                    results: calculateLoanDetails(25000000, 10, 6, 'reducing', '2026-05-19', 250000)
-                  }
-                ]);
-              }
-
-              if (localTrans) setOtherTransactions(JSON.parse(localTrans));
-              else {
-                setOtherTransactions([
-                  { id: 't-1', type: 'income', amount: 500000, description: 'ຄ່າທີ່ປຶກສາທຸລະກິດ', date: '2026-05-20' },
-                  { id: 't-2', type: 'expense', amount: 120000, description: 'ຊື້ເຈ້ຍ ແລະ ປາກກາຫ້ອງການ', date: '2026-05-21' }
-                ]);
-              }
-
-              if (localCap) setOwnerCapital(parseFloat(localCap));
-              if (localLiab) setOwnerLiabilities(parseFloat(localLiab));
-              
+              loadFallbackData();
               setFirebaseConnected(false);
               setConnectionError(null);
               return;
             }
 
-            // Initialize Firebase App securely
             let app;
             let connectedListener;
             let customersListener;
@@ -392,7 +383,7 @@
 
             try {
               if (!fbConfig.databaseURL || fbConfig.databaseURL.trim() === "") {
-                throw new Error("ກະລຸນາປ້ອນ 'Database URL' ໃນ Firebase Config. ຫາກບໍ່ມີ Database URL ຈະບໍ່ສາມາດເຊື່ອມຕໍ່ຖານຂໍ້ມູນໄດ້.");
+                throw new Error("ກະລຸນາປ້ອນ 'Database URL' ໃນ Firebase Config.");
               }
 
               if (!firebase.apps.length) {
@@ -404,7 +395,7 @@
               const db = app.database();
               setConnectionError("ກຳລັງກວດສອບການເຊື່ອມຕໍ່ຫາ Cloud Server...");
 
-              // 1. Listen directly to Real-time database connection state metadata node
+              // Real-time Database connection diagnostics
               const connectedRef = db.ref(".info/connected");
               connectedListener = connectedRef.on('value', (snap) => {
                 const isConnected = snap.val() === true;
@@ -416,16 +407,21 @@
                 }
               });
 
-              // 2. Setup Database Queries & listen to data sync with permission-denied error catchers
+              // Secure Data Listeners with Fallbacks
               const customersRef = db.ref('customers');
               customersListener = customersRef.on('value', 
                 (snapshot) => {
                   const val = snapshot.val();
-                  setCustomers(val ? Object.values(val) : []);
+                  const dataList = val ? Object.values(val) : [];
+                  setCustomers(dataList);
+                  if (dataList.length === 0 && !val) {
+                    insertInitialDemoData(db);
+                  }
                 },
                 (error) => {
                   console.error("Firebase read customers blocked:", error);
-                  setConnectionError(`ຖືກປະຕິເສດການເຂົ້າເຖິງ: ${error.message}. ກະລຸນາກວດສອບ Rules ຂອງ Database ໃນ Firebase Console ໃຫ້ເປັນ true ພາຍໃຕ້ແທັບ Rules.`);
+                  setConnectionError(`ຖືກປະຕິເສດການເຂົ້າເຖິງ: ${error.message}. ກະລຸນາກວດສອບ Rules ຂອງ Database ໃຫ້ເປັນ true ພາຍໃຕ້ແທັບ Rules.`);
+                  loadFallbackData();
                 }
               );
 
@@ -462,9 +458,9 @@
               console.error("Firebase Boot Error:", err);
               setFirebaseConnected(false);
               setConnectionError(`ຂໍ້ຜິດພາດ: ${err.message}`);
+              loadFallbackData();
             }
 
-            // Cleanup listeners on config update or component unmount
             return () => {
               if (app) {
                 const db = app.database();
@@ -478,25 +474,78 @@
 
           }, [fbConfig]);
 
-          // Local Sync backups in case Firebase is offline
+          const loadFallbackData = () => {
+            const localCust = localStorage.getItem('sme_local_customers');
+            const localTrans = localStorage.getItem('sme_local_transactions');
+            const localCap = localStorage.getItem('sme_local_capital');
+            const localLiab = localStorage.getItem('sme_local_liabilities');
+
+            const loadedCustomers = localCust ? JSON.parse(localCust) : [
+              {
+                id: 'demo-1',
+                name: 'ສົມຊິດ ພັດທະນາ',
+                phone: '02055567812',
+                startDate: '2026-05-19',
+                amount: 25000000,
+                rate: 10,
+                term: 6,
+                type: 'reducing',
+                fee: 250000,
+                endDate: '2026-11-19',
+                results: calculateLoanDetails(25000000, 10, 6, 'reducing', '2026-05-19', 250000)
+              }
+            ];
+
+            const loadedTrans = localTrans ? JSON.parse(localTrans) : [
+              { id: 't-1', type: 'income', amount: 500000, description: 'ຄ່າທີ່ປຶກສາທຸລະກິດ', date: '2026-05-20' },
+              { id: 't-2', type: 'expense', amount: 120000, description: 'ຊື້ເຈ້ຍ ແລະ ປາກກາຫ້ອງການ', date: '2026-05-21' }
+            ];
+
+            setCustomers(loadedCustomers);
+            setOtherTransactions(loadedTrans);
+            if (localCap) setOwnerCapital(parseFloat(localCap));
+            if (localLiab) setOwnerLiabilities(parseFloat(localLiab));
+
+            broadcastLocalSync(loadedCustomers, loadedTrans, localCap ? parseFloat(localCap) : ownerCapital, localLiab ? parseFloat(localLiab) : ownerLiabilities);
+          };
+
+          const insertInitialDemoData = (db) => {
+            const initialDemo = {
+              'demo-1': {
+                id: 'demo-1',
+                name: 'ສົມຊິດ ພັດທະນາ',
+                phone: '02055567812',
+                startDate: '2026-05-19',
+                amount: 25000000,
+                rate: 10,
+                term: 6,
+                type: 'reducing',
+                fee: 250000,
+                endDate: '2026-11-19',
+                results: calculateLoanDetails(25000000, 10, 6, 'reducing', '2026-05-19', 250000)
+              }
+            };
+            db.ref('customers').set(initialDemo);
+            db.ref('ownerCapital').set(500000000);
+            db.ref('ownerLiabilities').set(100000000);
+          };
+
+          // Save fallback copies to localStorage whenever states change locally
           useEffect(() => {
             if (!firebaseConnected) {
               localStorage.setItem('sme_local_customers', JSON.stringify(customers));
-            }
-          }, [customers, firebaseConnected]);
-
-          useEffect(() => {
-            if (!firebaseConnected) {
               localStorage.setItem('sme_local_transactions', JSON.stringify(otherTransactions));
+              localStorage.setItem('sme_local_capital', ownerCapital.toString());
+              localStorage.setItem('sme_local_liabilities', ownerLiabilities.toString());
             }
-          }, [otherTransactions, firebaseConnected]);
+          }, [customers, otherTransactions, ownerCapital, ownerLiabilities, firebaseConnected]);
 
           const updateCapitalLocalOrCloud = (newVal) => {
             setOwnerCapital(newVal);
             if (firebaseConnected) {
               firebase.database().ref('ownerCapital').set(newVal);
             } else {
-              localStorage.setItem('sme_local_capital', newVal.toString());
+              broadcastLocalSync(customers, otherTransactions, newVal, ownerLiabilities);
             }
           };
 
@@ -505,7 +554,7 @@
             if (firebaseConnected) {
               firebase.database().ref('ownerLiabilities').set(newVal);
             } else {
-              localStorage.setItem('sme_local_liabilities', newVal.toString());
+              broadcastLocalSync(customers, otherTransactions, ownerCapital, newVal);
             }
           };
 
@@ -554,7 +603,9 @@
             if (firebaseConnected) {
               firebase.database().ref(`customers/${newCustId}`).set(newCustomer);
             } else {
-              setCustomers(prev => [newCustomer, ...prev]);
+              const updatedList = [newCustomer, ...customers];
+              setCustomers(updatedList);
+              broadcastLocalSync(updatedList, otherTransactions, ownerCapital, ownerLiabilities);
             }
 
             setShowSuccessMsg(true);
@@ -574,7 +625,9 @@
             if (firebaseConnected) {
               firebase.database().ref(`customers/${customerToDelete.id}`).remove();
             } else {
-              setCustomers(prev => prev.filter(c => c.id !== customerToDelete.id));
+              const updatedList = customers.filter(c => c.id !== customerToDelete.id);
+              setCustomers(updatedList);
+              broadcastLocalSync(updatedList, otherTransactions, ownerCapital, ownerLiabilities);
             }
             setCustomerToDelete(null);
           };
@@ -604,6 +657,7 @@
               firebase.database().ref(`customers/${customerId}`).set(customerToUpdate);
             } else {
               setCustomers(updatedCustomers);
+              broadcastLocalSync(updatedCustomers, otherTransactions, ownerCapital, ownerLiabilities);
             }
           };
 
@@ -624,7 +678,9 @@
             if (firebaseConnected) {
               firebase.database().ref(`otherTransactions/${newTransId}`).set(newTrans);
             } else {
-              setOtherTransactions(prev => [newTrans, ...prev]);
+              const updatedTrans = [newTrans, ...otherTransactions];
+              setOtherTransactions(updatedTrans);
+              broadcastLocalSync(customers, updatedTrans, ownerCapital, ownerLiabilities);
             }
 
             setOtherTransForm({
@@ -639,7 +695,9 @@
             if (firebaseConnected) {
               firebase.database().ref(`otherTransactions/${id}`).remove();
             } else {
-              setOtherTransactions(prev => prev.filter(t => t.id !== id));
+              const updatedTrans = otherTransactions.filter(t => t.id !== id);
+              setOtherTransactions(updatedTrans);
+              broadcastLocalSync(customers, updatedTrans, ownerCapital, ownerLiabilities);
             }
           };
 
@@ -650,11 +708,20 @@
             setShowConfigModal(false);
           };
 
+          const handleResetToDefaultConfig = () => {
+            localStorage.setItem('sme_lender_firebase_config', JSON.stringify(DEFAULT_FIREBASE_CONFIG));
+            setFbConfig(DEFAULT_FIREBASE_CONFIG);
+            setTempConfig(DEFAULT_FIREBASE_CONFIG);
+            setShowConfigModal(false);
+            setConnectionError("ກຳລັງຕັ້ງຄ່າຄືນໃໝ່...");
+          };
+
           const handleDisconnectFirebase = () => {
             localStorage.removeItem('sme_lender_firebase_config');
             setFbConfig(null);
             setFirebaseConnected(false);
             setConnectionError(null);
+            loadFallbackData();
           };
 
           /* ==========================================
@@ -669,13 +736,15 @@
             let totalExpectedInterest = 0;
 
             customers.forEach(c => {
-              totalExpectedInterest += c.results.totalInterest;
-              c.results.schedule.forEach(item => {
-                if (item.status === 'paid') {
-                  totalPrincipalReceived += item.principalPayment;
-                  totalInterestReceived += item.interestPayment;
-                }
-              });
+              if (c.results) {
+                totalExpectedInterest += c.results.totalInterest || 0;
+                c.results.schedule.forEach(item => {
+                  if (item.status === 'paid') {
+                    totalPrincipalReceived += item.principalPayment;
+                    totalInterestReceived += item.interestPayment;
+                  }
+                });
+              }
             });
 
             const totalRepaymentsReceived = totalPrincipalReceived + totalInterestReceived;
@@ -932,7 +1001,7 @@
                     
                     <div class="legal-declaration">
                       <strong>ຖະແຫຼງການຍອມຮັບເງື່ອນໄຂ:</strong><br/>
-                      ຂ້າພະເຈົ້າ (ຜູ້ກູ້ຢືມ) ຂໍຢັ້ງຢືນວ່າ ໄດ້ອ່ານ, ຮັບຊາບ ແລະ ເຂົ້າໃຈເນື້ອໃນທັງໝົດຂອງສັນຍານີ້ຢ່າງລະອຽດ. ຂ້າພະເຈົ້າ <strong>"ຕົກລົງ ແລະ ຍອມຮັບທຸກເງື່ອນໄຂ"</strong> ໂດຍບໍ່ມີເງື່ອນໄຂໃດໆ ແລະ ຈະຮັບຜິດຊອບໃນການຊຳລະຄືນເງິນກູ້ຢືມນີ້ ຈົນກວ່າຈະຄົບຖ້ວນທຸກກີບ ຕາມທີ່ໄດ້ກຳນົດໄວ້ຂ້າງເທິງ.
+                      ຂ້າພະເຈົ້າ (ຜູ້ກູ້ຢືມ) ຂໍຢັ້ງຢືນວ່າ ໄດ້ອ່ານ, ຮັບຊາບ ແລະ ເຂົ້າໃຈເນື້ອໃນທັງໝົດofSeconds ຂອງສັນຍານີ້ຢ່າງລະອຽດ. ຂ້າພະເຈົ້າ <strong>"ຕົກລົງ ແລະ ຍອມຮັບທຸກເງື່ອນໄຂ"</strong> ໂດຍບໍ່ມີເງື່ອນໄຂໃດໆ ແລະ ຈະຮັບຜິດຊອບໃນການຊຳລະຄືນເງິນກູ້ຢືມນີ້ ຈົນກວ່າຈະຄົບຖ້ວນທຸກກີບ ຕາມທີ່ໄດ້ກຳນົດໄວ້ຂ້າງເທິງ.
                     </div>
                   </div>
 
@@ -960,9 +1029,6 @@
             printWindow.document.close();
           };
 
-          /* ==========================================
-             STREAMING_CHUNK:Configuring financial print statement...
-             ========================================== */
           const printFinancialStatement = () => {
             const printWindow = window.open('', '_blank');
             if (!printWindow) return;
@@ -1168,7 +1234,7 @@
 
                   <div class="signatures">
                     <div class="sig-box">
-                      <p style="margin: 0; font-weight: bold; color: #475569;">ຜູ້ບັນທຶກ ແລະ ສະຫຼຸບບັນຊີ</p>
+                      <p style="margin: 0; font-weight: bold; color: #475569;">... ບັນທຶກ ແລະ ສະຫຼຸບບັນຊີ ...</p>
                       <p style="margin: 45px 0 0 0; color: #64748b; font-size: 11px;">ເຊັນ ແລະ ວັນທີ</p>
                     </div>
                     <div class="sig-box">
@@ -1191,9 +1257,9 @@
 
             const headers = [
               'ຊື່ລູກຄ້າ (Customer Name)',
-              'ເບີໂທຕິດຕໍ່ (Phone)',
-              'ວັນທີເລີ່ມຕົ້ນ (Start Date)',
-              'ວັນທີຄົບກຳນົດ (Maturity Date)',
+              '\u0ec0\u0e9a\u0eb5\u0ec2\u0e97\u0eac\u0eb4\u0e94\u0eac\u0ecd\u0ec0 (Phone)',
+              '\u0ea7\u0eb1\u0e99\u0eac\u0eb5\u0ec0\u0ea5\u0eb5\u0ec8\u0ea1 (Start Date)',
+              '\u0ea7\u0eb1\u0e99\u0eac\u0eb5\u0e84\u0eb5\u0ec9\u0e81\u0ecd\u0eb3 (Maturity Date)',
               'ຕົ້ນທຶນກູ້ຢືມ (LAK)',
               'ຄ່າທຳນຽມເກັບກ່ອນ (LAK)',
               'ອັດຕາດອກເບ້ຍ (%)',
@@ -1243,7 +1309,7 @@
              STREAMING_CHUNK:Rendering main dashboard layout structure...
              ========================================== */
           return (
-            <div className="min-h-screen bg-slate-50 text-slate-850 p-4 md:p-6 font-sans antialiased">
+            <div className="min-h-screen bg-slate-50 text-slate-800 p-4 md:p-6 font-sans antialiased">
               
               {/* ADVANCED FIREBASE DIAGNOSTIC CONFIGURATION MODAL */}
               {showConfigModal && (
@@ -1251,19 +1317,37 @@
                   <div className="bg-white rounded-2xl max-w-xl w-full shadow-2xl border border-slate-200 overflow-hidden">
                     <form onSubmit={handleSaveFirebaseConfig}>
                       <div className="p-6 space-y-4">
-                        <div className="flex items-center space-x-3 text-blue-600 border-b pb-3">
-                          <IconCloud />
-                          <h3 className="text-lg font-bold text-slate-900">ຕັ້ງຄ່າເຊື່ອມຕໍ່ລະບົບ Cloud Sync (Firebase)</h3>
+                        <div className="flex items-center justify-between text-blue-600 border-b pb-3">
+                          <div className="flex items-center space-x-3">
+                            <IconCloud />
+                            <h3 className="text-lg font-bold text-slate-900">ຕັ້ງຄ່າເຊື່ອມຕໍ່ລະບົບ Cloud Sync (Firebase)</h3>
+                          </div>
+                          <button 
+                            type="button" 
+                            onClick={handleResetToDefaultConfig}
+                            className="text-xs bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold px-3 py-1.5 rounded-lg border border-amber-200 transition-all"
+                          >
+                            Reset ໃສ່ຄ່າເລີ່ມຕົ້ນ
+                          </button>
                         </div>
                         
                         {/* Interactive Tutorial Guides for Owners */}
                         <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl space-y-2 text-xs text-blue-800 leading-relaxed font-semibold">
-                          <p className="font-bold text-sm text-blue-900">💡 ວິທີຫາຄ່າ Config ແລະ ແກ້ໄຂບັນຫາ Offline:</p>
-                          <ul className="list-decimal pl-4 space-y-1">
-                            <li><strong>ສໍາຄັນທີ່ສຸດ:</strong> ທ່ານຕ້ອງປ້ອນ <strong className="text-rose-700">Database URL</strong> ໃຫ້ຖືກຕ້ອງ. ຖ້າບໍ່ປ້ອນ ລະບົບຈະຂຶ້ນ Offline ຕະຫຼອດໄປ.</li>
-                            <li>ກັອບປີ້ Database URL ຈາກໜ້າ **Realtime Database** ຂອງ Firebase (ຕົວຢ່າງ: <code className="bg-white px-1 py-0.5 rounded border">https://yourproject-rtdb.firebaseio.com</code>).</li>
-                            <li><strong>ຕັ້ງຄ່າ Rules:</strong> ເຂົ້າໄປແທັບ **Rules** ໃນ Firebase Realtime Database ແລ້ວປ່ຽນ <code className="bg-white px-1 py-0.5 rounded border">".read"</code> ແລະ <code className="bg-white px-1 py-0.5 rounded border">".write"</code> ໃຫ້ເປັນ <code className="bg-white px-1 text-emerald-700 py-0.5 rounded border font-bold">true</code> ເພື່ອອະນຸຍາດໃຫ້ເຊື່ອມຕໍ່.</li>
+                          <p className="font-bold text-sm text-blue-900">💡 ວິທີແກ້ໄຂບັນຫາ Offline ຂອງ Firebase Rules:</p>
+                          <p className="text-slate-600">ຖ້າລະບົບຂຶ້ນວ່າ "ຖືກປະຕິເສດການເຂົ້າເຖິງ" (Access Denied), ນັ້ນຫມາຍຄວາມວ່າ Database Rules ຂອງທ່ານຖືກປິດໄວ້. ກະລຸນາແກ້ໄຂດັ່ງນີ້:</p>
+                          <ul className="list-decimal pl-4 space-y-1 text-slate-700">
+                            <li>ເຂົ້າໄປທີ່ **Firebase Console** &gt; **Realtime Database** &gt; ດ້ານເທິງເລືອກແທັບ **Rules**</li>
+                            <li>ກັອບປີ້ Rules ດ້ານລຸ່ມນີ້ໄປປ່ຽນແທນຄ່າເກົ່າ:</li>
                           </ul>
+                          <pre className="bg-slate-900 text-emerald-400 p-2.5 rounded-lg text-[10px] font-mono leading-tight overflow-x-auto select-all">
+{`{
+  "rules": {
+    ".read": "true",
+    ".write": "true"
+  }
+}`}
+                          </pre>
+                          <p className="text-slate-500 font-bold text-[10px]">* ຫຼັງຈາກປ່ຽນແລ້ວໃຫ້ກົດປຸ່ມ **Publish** ໃນ Firebase Console ເພື່ອໃຫ້ມີຜົນໃຊ້ງານ.</p>
                         </div>
                         
                         <div className="space-y-3 text-xs">
@@ -1387,12 +1471,18 @@
                     </div>
                     <div>
                       <h1 className="text-2xl font-bold text-slate-950 tracking-tight">ລະບົບບັນຊີປ່ອຍກູ້ & ບົດສະຫຼຸບການເງິນ SME</h1>
-                      <p className="text-xs text-slate-500 font-bold mt-1">
-                        ເຄື່ອງມືຄຸ້ມຄອງການເງິນສຳລັບທຸລະກິດ | 
+                      <p className="text-xs text-slate-500 font-bold mt-1 flex items-center flex-wrap gap-2">
+                        <span>ເຄື່ອງມືຄຸ້ມຄອງການເງິນສຳລັບທຸລະກິດ |</span>
                         {firebaseConnected ? (
-                          <span className="text-emerald-600 font-extrabold ml-1">✓ ເຊື່ອມຕໍ່ Cloud Real-time ແລ້ວ</span>
+                          <span className="text-emerald-600 font-extrabold flex items-center bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100 animate-pulse">
+                            <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full mr-1.5"></span>
+                            ✓ ເຊື່ອມຕໍ່ Cloud Sync ແລ້ວ
+                          </span>
                         ) : (
-                          <span className="text-amber-600 font-extrabold ml-1">⚠ ໂໝດອອບລາຍ (ບັນທຶກໃນເຄື່ອງນີ້)</span>
+                          <span className="text-amber-600 font-extrabold flex items-center bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                            <span className="w-1.5 h-1.5 bg-amber-500 rounded-full mr-1.5"></span>
+                            ⚠ Multi-Tab Sync Tunnel Active (ໂໝດອອບລາຍ)
+                          </span>
                         )}
                       </p>
                     </div>
@@ -1403,7 +1493,7 @@
                     {firebaseConnected ? (
                       <button
                         onClick={handleDisconnectFirebase}
-                        className="flex items-center justify-center px-4 py-3 bg-rose-50 border border-rose-200 hover:bg-rose-100 text-rose-700 rounded-xl font-bold transition-all text-xs"
+                        className="flex items-center justify-center px-4 py-3 bg-rose-50 border border-rose-200 hover:bg-rose-100 text-rose-700 rounded-xl font-bold transition-all text-xs shadow-sm hover:shadow-md"
                       >
                         <span className="mr-2"><IconCloud /></span>
                         ຕັດການເຊື່ອມຕໍ່ Cloud
@@ -1411,18 +1501,10 @@
                     ) : (
                       <button
                         onClick={() => {
-                          setTempConfig(fbConfig || {
-                            apiKey: '',
-                            authDomain: '',
-                            databaseURL: '',
-                            projectId: '',
-                            storageBucket: '',
-                            messagingSenderId: '',
-                            appId: ''
-                          });
+                          setTempConfig(fbConfig || DEFAULT_FIREBASE_CONFIG);
                           setShowConfigModal(true);
                         }}
-                        className="flex items-center justify-center px-4 py-3 bg-blue-50 border border-blue-200 hover:bg-blue-100 text-blue-700 rounded-xl font-bold transition-all text-xs"
+                        className="flex items-center justify-center px-4 py-3 bg-blue-50 border border-blue-200 hover:bg-blue-100 text-blue-700 rounded-xl font-bold transition-all text-xs shadow-sm hover:shadow-md"
                       >
                         <span className="mr-2"><IconCloud /></span>
                         ເຊື່ອມຕໍ່ Cloud Sync
@@ -1432,9 +1514,9 @@
                     <button 
                       onClick={exportAllToCSV}
                       disabled={customers.length === 0}
-                      className={`flex items-center justify-center px-5 py-3 rounded-xl font-bold transition-all text-xs ${
+                      className={`flex items-center justify-center px-5 py-3 rounded-xl font-bold transition-all text-xs shadow-sm ${
                         customers.length > 0 
-                          ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-md' 
+                          ? 'bg-blue-600 hover:bg-blue-700 text-white hover:shadow-md' 
                           : 'bg-slate-100 text-slate-400 cursor-not-allowed'
                       }`}
                     >
@@ -1447,59 +1529,70 @@
                 {/* CONNECTION ERROR DIAGNOSTICS ALERTS */}
                 {connectionError && (
                   <div className="bg-rose-50 border-l-4 border-rose-500 p-4 rounded-xl text-rose-800 text-xs font-semibold leading-relaxed shadow-sm">
-                    <p className="font-bold text-sm text-rose-900 mb-1">⚠ ກວດພົບຂໍ້ຜິດພາດໃນການເຊື່ອມຕໍ່ Cloud:</p>
-                    <p>{connectionError}</p>
-                    <div className="mt-2 text-[10px] text-rose-600">
-                      * ວິທີແກ້ໄຂ: 1) ກວດສອບວ່າທ່ານໄດ້ປ້ອນ Database URL ຫຼື ບໍ່, 2) ເປີດ Security Rules ຂອງ Realtime Database ໃຫ້ເປັນ true, 3) ກວດສອບສັນຍານອິນເຕີເນັດ.
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div>
+                        <p className="font-bold text-sm text-rose-900 mb-1">⚠ ລະບົບກຳລັງກວດສອບ ຫຼື ຖືກບລັອກການເຊື່ອມຕໍ່:</p>
+                        <p>{connectionError}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTempConfig(fbConfig || DEFAULT_FIREBASE_CONFIG);
+                          setShowConfigModal(true);
+                        }}
+                        className="text-[11px] bg-rose-100 hover:bg-rose-200 text-rose-900 border border-rose-300 font-bold px-3 py-1.5 rounded-lg transition-all"
+                      >
+                        ເບິ່ງວິທີແກ້ໄຂ & ແກ້ Rules ຂອງ Firebase
+                      </button>
                     </div>
                   </div>
                 )}
 
-                {/* METRICS ROW */}
+                {/* TOP METRICS ROW */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center space-x-4">
-                    <div className="p-3 bg-emerald-100 text-emerald-700 rounded-lg">
+                  <div className="bg-white p-5 rounded-2xl border border-slate-200/65 shadow-sm hover:shadow-md transition-all flex items-center space-x-4">
+                    <div className="p-3.5 bg-emerald-50 text-emerald-600 rounded-xl">
                       <IconCalculator />
                     </div>
                     <div>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase">ຍອດເງິນກູ້ປ່ອຍອອກທັງໝົດ</p>
-                      <h3 className="text-base font-extrabold text-slate-900">{formatLAK(financialSummary.totalPrincipalLoaned)}</h3>
-                      <p className="text-[10px] text-slate-500 font-bold">{customers.length} ສັນຍາ</p>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">ຍອດເງິນກູ້ປ່ອຍອອກທັງໝົດ</p>
+                      <h3 className="text-lg font-extrabold text-slate-900 mt-0.5">{formatLAK(financialSummary.totalPrincipalLoaned)}</h3>
+                      <p className="text-[10px] text-slate-500 font-bold mt-0.5">{customers.length} ບັນຊີສັນຍາ</p>
                     </div>
                   </div>
 
-                  <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center space-x-4">
-                    <div className="p-3 bg-amber-100 text-amber-700 rounded-lg">
+                  <div className="bg-white p-5 rounded-2xl border border-slate-200/65 shadow-sm hover:shadow-md transition-all flex items-center space-x-4">
+                    <div className="p-3.5 bg-amber-50 text-amber-600 rounded-xl">
                       <IconPercent />
                     </div>
                     <div>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase">ລາຍຮັບລວມ (ດອກເບ້ຍ + ຄ່າທຳນຽມ)</p>
-                      <h3 className="text-base font-extrabold text-slate-950">{formatLAK(financialSummary.netProfit)}</h3>
-                      <p className="text-[10px] text-amber-700 font-bold">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">ລາຍຮັບລວມ (ດອກເບ້ຍ+ທຳນຽມ)</p>
+                      <h3 className="text-lg font-extrabold text-slate-950 mt-0.5">{formatLAK(financialSummary.netProfit)}</h3>
+                      <p className="text-[10px] text-amber-600 font-semibold mt-0.5">
                         ດອກເບ້ຍ: {formatLAK(financialSummary.totalExpectedInterest)}
                       </p>
                     </div>
                   </div>
 
-                  <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center space-x-4">
-                    <div className="p-3 bg-blue-100 text-blue-700 rounded-lg">
+                  <div className="bg-white p-5 rounded-2xl border border-slate-200/65 shadow-sm hover:shadow-md transition-all flex items-center space-x-4">
+                    <div className="p-3.5 bg-blue-50 text-blue-600 rounded-xl">
                       <IconCalendar />
                     </div>
                     <div>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase">ເງິນສົດໃນຄັງ (Cash on Hand)</p>
-                      <h3 className="text-base font-extrabold text-blue-900">{formatLAK(financialSummary.cashOnHand)}</h3>
-                      <p className="text-[10px] text-slate-500 font-bold font-sans">ອັບເດດຈາກການຊຳລະຕົວຈິງ</p>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">ເງິນສົດໃນຄັງ (Cash on Hand)</p>
+                      <h3 className="text-lg font-extrabold text-blue-900 mt-0.5">{formatLAK(financialSummary.cashOnHand)}</h3>
+                      <p className="text-[10px] text-slate-500 font-bold mt-0.5">ອັບເດດຈາກການເຄື່ອນໄຫວຈິງ</p>
                     </div>
                   </div>
 
-                  <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center space-x-4">
-                    <div className="p-3 bg-purple-100 text-purple-700 rounded-lg">
+                  <div className="bg-white p-5 rounded-2xl border border-slate-200/65 shadow-sm hover:shadow-md transition-all flex items-center space-x-4">
+                    <div className="p-3.5 bg-purple-50 text-purple-600 rounded-xl">
                       <IconUser />
                     </div>
                     <div>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase">ຍອດເງິນກູ້ຄົງຄ້າງປັດຈຸບັນ</p>
-                      <h3 className="text-base font-extrabold text-purple-900">{formatLAK(financialSummary.activeOutstandingPortfolio)}</h3>
-                      <p className="text-[10px] text-slate-500 font-bold">ຕົ້ນທຶນທີ່ຍັງບໍ່ທັນເກັບຄືນ</p>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">ຍອດເງິນກູ້ຄົງຄ້າງປັດຈຸບັນ</p>
+                      <h3 className="text-lg font-extrabold text-purple-900 mt-0.5">{formatLAK(financialSummary.activeOutstandingPortfolio)}</h3>
+                      <p className="text-[10px] text-slate-500 font-bold mt-0.5">ຕົ້ນທຶນທີ່ຍັງບໍ່ທັນເກັບຄືນ</p>
                     </div>
                   </div>
                 </div>
@@ -1507,22 +1600,22 @@
                 {/* MAIN GRID */}
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                   
-                  {/* LEFT AREA: FORMS & TRANSACTION REGISTER */}
+                  {/* LEFT COLUMN: forms and other transactions */}
                   <div className="lg:col-span-5 space-y-6">
                     
-                    {/* 1. NEW BORROWER FORM */}
-                    <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                    {/* ADD NEW BORROWER FORM */}
+                    <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200/70">
                       <h2 className="text-base font-bold mb-5 flex items-center text-slate-900 border-b pb-4">
                         <span className="mr-2 text-emerald-500"><IconUser /></span> ເພີ່ມຜູ້ກູ້ໃໝ່
                       </h2>
                       
                       <div className="space-y-4">
-                        <div className="space-y-4 bg-slate-50/70 p-4 rounded-xl border border-slate-100">
+                        <div className="space-y-4 bg-slate-50/70 p-4 rounded-xl border border-slate-200/40">
                           <div>
                             <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">ຊື່ ແລະ ນາມສະກຸນ ຜູ້ກູ້ຢືມ</label>
                             <input
                               type="text" name="name" value={formData.name} onChange={handleInputChange}
-                              className="block w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 sm:text-xs bg-white font-bold"
+                              className="block w-full px-3 py-2 border border-slate-250 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 sm:text-xs bg-white font-bold transition-all"
                               placeholder="ປ້ອນຊື່ເຕັມຜູ້ກູ້ຢືມ"
                             />
                           </div>
@@ -1532,7 +1625,7 @@
                               <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">ເບີໂທລະສັບຕິດຕໍ່</label>
                               <input
                                 type="tel" name="phone" value={formData.phone} onChange={handleInputChange}
-                                className="block w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 sm:text-xs bg-white font-bold"
+                                className="block w-full px-3 py-2 border border-slate-250 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 sm:text-xs bg-white font-bold transition-all"
                                 placeholder="020..."
                               />
                             </div>
@@ -1541,7 +1634,7 @@
                               <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">ວັນທີເລີ່ມສັນຍາ</label>
                               <input
                                 type="date" name="startDate" value={formData.startDate} onChange={handleInputChange}
-                                className="block w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 sm:text-xs bg-white font-bold"
+                                className="block w-full px-3 py-2 border border-slate-250 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 sm:text-xs bg-white font-bold transition-all"
                               />
                             </div>
                           </div>
@@ -1555,16 +1648,14 @@
                         </div>
 
                         <div>
-                          <div className="flex justify-between items-center mb-1">
-                            <label className="block text-xs font-bold text-slate-700">ມູນຄ່າຕົ້ນທຶນປ່ອຍກູ້ (LAK)</label>
-                          </div>
+                          <label className="block text-xs font-bold text-slate-700 mb-1">ມູນຄ່າຕົ້ນທຶນປ່ອຍກູ້ (LAK)</label>
                           <input
                             type="number" name="amount" value={formData.amount} onChange={handleInputChange}
-                            className="block w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 text-sm font-bold text-slate-900 bg-white"
+                            className="block w-full px-3.5 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm font-bold text-slate-900 bg-white transition-all"
                             placeholder="ປ້ອນຈຳນວນເງິນກູ້"
                           />
                           {formData.amount && (
-                            <div className="text-right mt-1">
+                            <div className="text-right mt-1.5">
                               <span className="text-xs font-extrabold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">
                                 {formatLAK(parseFloat(formData.amount))}
                               </span>
@@ -1576,11 +1667,11 @@
                           <label className="block text-xs font-bold text-slate-700 mb-1">ຄ່າທຳນຽມເກັບກ່ອນ (LAK)</label>
                           <input
                             type="number" name="fee" value={formData.fee} onChange={handleInputChange}
-                            className="block w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 text-sm font-bold text-slate-900 bg-white"
+                            className="block w-full px-3.5 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm font-bold text-slate-900 bg-white transition-all"
                             placeholder="ຄ່າທຳນຽມສັນຍາ"
                           />
                           {formData.fee && (
-                            <div className="text-right mt-1">
+                            <div className="text-right mt-1.5">
                               <span className="text-xs font-extrabold text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
                                 {formatLAK(parseFloat(formData.fee))}
                               </span>
@@ -1593,7 +1684,7 @@
                             <label className="block text-[10px] font-bold text-slate-700 mb-1">ອັດຕາດອກເບ້ຍຕໍ່ປີ (%)</label>
                             <input
                               type="number" name="rate" value={formData.rate} onChange={handleInputChange} step="0.1"
-                              className="block w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 sm:text-xs bg-white font-extrabold text-slate-800"
+                              className="block w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 sm:text-xs bg-white font-extrabold text-slate-800"
                             />
                           </div>
                           
@@ -1601,7 +1692,7 @@
                             <label className="block text-[10px] font-bold text-slate-700 mb-1">ໄລຍະເວລາສັນຍາ (ເດືອນ)</label>
                             <input
                               type="number" name="term" value={formData.term} onChange={handleInputChange}
-                              className="block w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 sm:text-xs bg-white font-extrabold text-slate-800"
+                              className="block w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 sm:text-xs bg-white font-extrabold text-slate-800"
                             />
                           </div>
                         </div>
@@ -1611,7 +1702,7 @@
                           <div className="grid grid-cols-2 gap-3">
                             <button
                               onClick={() => handleTypeChange('reducing')}
-                              className={`flex flex-col items-center justify-center p-2.5 rounded-xl border transition-all ${
+                              className={`flex flex-col items-center justify-center p-2.5 rounded-xl border-2 transition-all ${
                                 formData.type === 'reducing' ? 'border-emerald-500 bg-emerald-50 text-emerald-700 font-bold' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
                               }`}
                             >
@@ -1619,7 +1710,7 @@
                             </button>
                             <button
                               onClick={() => handleTypeChange('fixed')}
-                              className={`flex flex-col items-center justify-center p-2.5 rounded-xl border transition-all ${
+                              className={`flex flex-col items-center justify-center p-2.5 rounded-xl border-2 transition-all ${
                                 formData.type === 'fixed' ? 'border-emerald-500 bg-emerald-50 text-emerald-700 font-bold' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
                               }`}
                             >
@@ -1655,7 +1746,7 @@
                                   ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
                                   : showSuccessMsg
                                     ? 'bg-emerald-500 text-white'
-                                    : 'bg-slate-950 hover:bg-slate-850 text-white'
+                                    : 'bg-slate-950 hover:bg-slate-850 text-white shadow-md'
                               }`}
                             >
                               {showSuccessMsg ? '✓ ບັນທຶກສັນຍາສຳເລັດແລ້ວ' : 'ບັນທຶກລົງປຶ້ມບັນຊີປະຈຳວັນ'}
@@ -1665,8 +1756,8 @@
                       </div>
                     </div>
 
-                    {/* 2. OTHER INCOME & EXPENSES FORM */}
-                    <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                    {/* OTHER INCOME & EXPENSES FORM */}
+                    <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200/70">
                       <h2 className="text-base font-bold mb-4 flex items-center text-slate-900 border-b pb-4">
                         <span className="mr-2 text-blue-500"><IconPlus /></span> ບັນທຶກລາຍຮັບ - ລາຍຈ່າຍອື່ນໆ
                       </h2>
@@ -1676,7 +1767,7 @@
                           <button
                             type="button"
                             onClick={() => setOtherTransForm(prev => ({ ...prev, type: 'income' }))}
-                            className={`py-2 rounded-lg text-xs font-bold border transition-all ${
+                            className={`py-2 rounded-lg text-xs font-bold border-2 transition-all ${
                               otherTransForm.type === 'income' ? 'bg-emerald-50 border-emerald-500 text-emerald-700' : 'bg-white border-slate-200 text-slate-600'
                             }`}
                           >
@@ -1685,7 +1776,7 @@
                           <button
                             type="button"
                             onClick={() => setOtherTransForm(prev => ({ ...prev, type: 'expense' }))}
-                            className={`py-2 rounded-lg text-xs font-bold border transition-all ${
+                            className={`py-2 rounded-lg text-xs font-bold border-2 transition-all ${
                               otherTransForm.type === 'expense' ? 'bg-rose-50 border-rose-500 text-rose-700' : 'bg-white border-slate-200 text-slate-600'
                             }`}
                           >
@@ -1700,7 +1791,7 @@
                               type="number"
                               value={otherTransForm.amount}
                               onChange={(e) => setOtherTransForm(prev => ({ ...prev, amount: e.target.value }))}
-                              className="block w-full px-3 py-1.5 border border-slate-300 rounded-lg sm:text-xs font-bold"
+                              className="block w-full px-3 py-1.5 border border-slate-300 rounded-lg sm:text-xs font-bold focus:ring-2 focus:ring-blue-500 transition-all"
                               placeholder="ປ້ອນມູນຄ່າ"
                             />
                           </div>
@@ -1710,7 +1801,7 @@
                               type="date"
                               value={otherTransForm.date}
                               onChange={(e) => setOtherTransForm(prev => ({ ...prev, date: e.target.value }))}
-                              className="block w-full px-3 py-1.5 border border-slate-300 rounded-lg sm:text-xs font-bold"
+                              className="block w-full px-3 py-1.5 border border-slate-300 rounded-lg sm:text-xs font-bold focus:ring-2 focus:ring-blue-500 transition-all"
                             />
                           </div>
                         </div>
@@ -1721,7 +1812,7 @@
                             type="text"
                             value={otherTransForm.description}
                             onChange={(e) => setOtherTransForm(prev => ({ ...prev, description: e.target.value }))}
-                            className="block w-full px-3 py-1.5 border border-slate-300 rounded-lg sm:text-xs font-semibold"
+                            className="block w-full px-3 py-1.5 border border-slate-300 rounded-lg sm:text-xs font-semibold focus:ring-2 focus:ring-blue-500 transition-all"
                             placeholder="ລະບຸລາຍລະອຽດ ຫຼື ຈຸດປະສົງ"
                           />
                         </div>
@@ -1735,11 +1826,11 @@
                               : 'bg-blue-600 hover:bg-blue-700 text-white'
                           }`}
                         >
-                          # ບັນທຶກລາຍການທຸລະກຳ
+                          ບັນທຶກລາຍການທຸລະກຳ
                         </button>
                       </form>
 
-                      {/* 3. HISTORY OF OTHER TRANSACTIONS PLACED DIRECTLY BELOW */}
+                      {/* HISTORY OF OTHER TRANSACTIONS PLACED DIRECTLY BELOW */}
                       <div className="mt-6 pt-5 border-t border-slate-200 space-y-3">
                         <div className="flex justify-between items-center">
                           <h3 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">
@@ -1784,288 +1875,316 @@
 
                   </div>
 
-                  {/* RIGHT AREA: CUSTOMER LISTS & FINANCIAL STATEMENT */}
+                  {/* RIGHT COLUMN: Customers Ledger and Statements */}
                   <div className="lg:col-span-7 space-y-6">
                     
-                    {/* 1. LIST OF BORROWERS */}
-                    <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-                      <h2 className="text-base font-bold mb-5 flex items-center text-slate-900 border-b pb-4">
-                        <span className="mr-2 text-emerald-600"><IconUser /></span> ລາຍຊື່ລູກຄ້າກູ້ຢືມ
-                      </h2>
+                    {/* LIST OF BORROWERS CARD WRAPPER - Made scrollable with fixed heights */}
+                    <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm flex flex-col h-[650px] lg:h-[920px]">
+                      <div className="bg-slate-900 text-white p-4 font-bold text-sm uppercase tracking-wider flex justify-between items-center px-6 shrink-0">
+                        <span>ລາຍຊື່ລູກຄ້າກູ້ຢືມ & ບົດສະຫຼຸບຖານະການເງິນ</span>
+                        {activeTab === 'financials' && (
+                          <button 
+                            onClick={printFinancialStatement}
+                            className="bg-white hover:bg-slate-100 text-slate-900 rounded-lg px-3 py-1.5 font-extrabold text-xs flex items-center transition-all shadow-sm"
+                          >
+                            <span className="mr-1"><IconPrinter /></span> ພິມລາຍງານ
+                          </button>
+                        )}
+                      </div>
 
-                      {customers.length === 0 ? (
-                        <div className="py-12 text-center text-slate-400 space-y-2">
-                          <IconUser />
-                          <p className="font-bold text-xs">ບໍ່ທັນມີຂໍ້ມູນລູກຄ້າກູ້ຢືມ</p>
+                      {/* Tab Selectors Group */}
+                      <div className="px-6 pt-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center shrink-0">
+                        <div className="flex space-x-2">
+                          <button
+                            onClick={() => setActiveTab('ledger')}
+                            className={`pb-3 px-4 text-xs font-bold border-b-2 transition-all ${
+                              activeTab === 'ledger' 
+                                ? 'border-emerald-600 text-emerald-700' 
+                                : 'border-transparent text-slate-400 hover:text-slate-600'
+                            }`}
+                          >
+                            ລາຍການບັນທຶກປະຈຳວັນ ({customers.length} ບັນຊີ)
+                          </button>
+                          <button
+                            onClick={() => setActiveTab('financials')}
+                            className={`pb-3 px-4 text-xs font-bold border-b-2 transition-all ${
+                              activeTab === 'financials' 
+                                ? 'border-emerald-600 text-emerald-700' 
+                                : 'border-transparent text-slate-400 hover:text-slate-600'
+                            }`}
+                          >
+                            ງົບດຸນ (Balance Sheet)
+                          </button>
                         </div>
-                      ) : (
-                        <div className="space-y-4">
-                          {customers.map((customer) => {
-                            const isExpanded = expandedCustomerId === customer.id;
-                            const paidCount = customer.results.schedule.filter(item => item.status === 'paid').length;
-                            const totalCount = customer.results.schedule.length;
+                      </div>
 
-                            return (
-                              <div key={customer.id} className="border border-slate-200 rounded-xl p-4 shadow-sm hover:shadow-md transition-all relative">
+                      {/* Scrollable Tab Content Viewport */}
+                      <div className="flex-1 p-6 overflow-y-auto bg-slate-50/30">
+                        {activeTab === 'ledger' && (
+                          <div className="space-y-4">
+                            {customers.length === 0 ? (
+                              <div className="py-12 text-center text-slate-400 space-y-2">
+                                <IconUser />
+                                <p className="font-bold text-xs">ບໍ່ທັນມີຂໍ້ມູນລູກຄ້າກູ້ຢືມ</p>
+                              </div>
+                            ) : (
+                              customers.map((customer, index) => {
+                                const isExpanded = expandedCustomerId === customer.id;
+                                const paidCount = customer.results.schedule.filter(item => item.status === 'paid').length;
+                                const totalCount = customer.results.schedule.length;
+
+                                return (
+                                  <div key={customer.id} className="border border-slate-200/60 bg-white rounded-xl p-4 shadow-sm hover:shadow-md transition-all relative">
+                                    
+                                    <button 
+                                      onClick={() => setCustomerToDelete(customer)}
+                                      className="absolute top-4 right-4 text-slate-400 hover:text-rose-600 p-1 rounded-lg hover:bg-rose-50"
+                                    >
+                                      <IconTrash />
+                                    </button>
+
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3 pb-3 border-b border-slate-100 pr-8">
+                                      <div>
+                                        <h4 className="font-bold text-slate-900 text-sm flex items-center gap-2">
+                                          <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-extrabold px-2 py-0.5 rounded-lg shadow-sm">
+                                            #{index + 1}
+                                          </span>
+                                          {customer.name}
+                                        </h4>
+                                        <p className="text-[10px] text-slate-500 flex flex-wrap items-center mt-1 gap-2">
+                                          <span className="flex items-center text-slate-600 font-semibold bg-slate-100 px-1.5 py-0.5 rounded">
+                                            <span className="mr-1"><IconPhone /></span> {customer.phone || '—'}
+                                          </span>
+                                          <span>ເລີ່ມ: {customer.startDate}</span>
+                                          <span className="text-emerald-700 font-semibold bg-emerald-50 px-1.5 py-0.5 rounded">
+                                            ຄົບກຳນົດ: {customer.endDate}
+                                          </span>
+                                        </p>
+                                      </div>
+                                      <div>
+                                        <span className={`inline-block px-2 py-0.5 text-[10px] font-bold rounded-lg ${
+                                          customer.type === 'reducing' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                                        }`}>
+                                          {customer.type === 'reducing' ? 'ຫຼຸດຕົ້ນຫຼຸດດອກ' : 'ດອກເບ້ຍຄົງທີ່'}
+                                        </span>
+                                      </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-[11px] pb-3 border-b border-slate-100/50">
+                                      <div>
+                                        <p className="text-slate-400 font-bold mb-0.5">ຕົ້ນທຶນປ່ອຍກູ້</p>
+                                        <p className="font-extrabold text-slate-900">{formatLAK(customer.amount)}</p>
+                                      </div>
+                                      <div>
+                                        <p className="text-slate-400 font-bold mb-0.5">ຄ່າທຳນຽມເກັບກ່ອນ</p>
+                                        <p className="font-extrabold text-blue-600">{formatLAK(customer.fee)}</p>
+                                      </div>
+                                      <div>
+                                        <p className="text-slate-400 font-bold mb-0.5">ດອກເບ້ຍ / ໄລຍະເວລາ</p>
+                                        <p className="font-bold text-slate-800">{customer.rate}% / {customer.term} ເດືອນ</p>
+                                      </div>
+                                      <div>
+                                        <p className="text-slate-400 font-bold mb-0.5">ຄ່າຜ່ອນຊຳລະຕໍ່ເດືອນ</p>
+                                        <p className="font-extrabold text-blue-700">{formatLAK(customer.results.monthlyPayment)}</p>
+                                      </div>
+                                    </div>
+
+                                    {/* EXPANDABLE REPAYMENT GRID */}
+                                    {isExpanded && (
+                                      <div className="mt-4 border border-slate-200/60 rounded-lg overflow-hidden max-h-60 overflow-y-auto shadow-inner bg-slate-50/20">
+                                        <table className="w-full text-left text-xs border-collapse">
+                                          <thead>
+                                            <tr className="bg-slate-100/80 text-slate-500 font-bold text-[10px] border-b border-slate-200">
+                                              <th className="py-2.5 px-3 text-center">ງວດ</th>
+                                              <th className="py-2.5 px-3 text-center">ກຳນົດຊຳລະ</th>
+                                              <th className="py-2.5 px-3 text-right">ຍອດຊຳລະ</th>
+                                              <th className="py-2.5 px-3 text-right">ຕົ້ນທຶນ</th>
+                                              <th className="py-2.5 px-3 text-right">ດອກເບ້ຍ</th>
+                                              <th className="py-2.5 px-3 text-center">ການຊຳລະ</th>
+                                            </tr>
+                                          </thead>
+                                          <tbody className="divide-y divide-slate-100 text-slate-700 bg-white">
+                                            {customer.results.schedule.map((row) => (
+                                              <tr key={row.month} className="hover:bg-slate-50/50 transition-colors">
+                                                <td className="py-2 px-3 text-center font-bold text-slate-500">{row.month}</td>
+                                                <td className="py-2 px-3 text-center font-bold text-blue-700">{row.paymentDate}</td>
+                                                <td className="py-2 px-3 text-right font-bold text-slate-900">{formatLAK(row.payment)}</td>
+                                                <td className="py-2 px-3 text-right text-emerald-600 font-semibold">{formatLAK(row.principalPayment)}</td>
+                                                <td className="py-2 px-3 text-right text-amber-600 font-semibold">{formatLAK(row.interestPayment)}</td>
+                                                <td className="py-2 px-3 text-center">
+                                                  <button
+                                                    onClick={() => toggleInstallmentStatus(customer.id, row.month)}
+                                                    className={`px-2.5 py-0.5 rounded text-[10px] font-bold transition-all ${
+                                                      row.status === 'paid'
+                                                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                                        : 'bg-rose-100 text-rose-800 hover:bg-rose-200 border border-rose-200'
+                                                    }`}
+                                                  >
+                                                    {row.status === 'paid' ? '✓ ຊຳລະແລ້ວ' : 'ໝາຍວ່າຊຳລະ'}
+                                                  </button>
+                                                </td>
+                                              </tr>
+                                            ))}
+                                          </tbody>
+                                        </table>
+                                      </div>
+                                    )}
+
+                                    <div className="pt-3 flex flex-wrap gap-2 justify-between items-center">
+                                      <div className="flex gap-2">
+                                        <button
+                                          onClick={() => setExpandedCustomerId(isExpanded ? null : customer.id)}
+                                          className="text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-colors"
+                                        >
+                                          {isExpanded ? 'ຫຍໍ້ຕາຕະລາງ' : 'ຂະຫຍາຍຕາຕະລາງ'}
+                                        </button>
+                                        <button
+                                          onClick={() => printSingleCustomerSchedule(customer)}
+                                          className="text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg flex items-center transition-colors border border-slate-200"
+                                        >
+                                          <span className="mr-1"><IconPrinter /></span> ພິມສັນຍາ
+                                        </button>
+                                      </div>
+                                      <span className="text-[10px] text-slate-400 font-bold">
+                                        ຊຳລະແລ້ວ {paidCount}/{totalCount} ງວດ
+                                      </span>
+                                    </div>
+
+                                  </div>
+                                );
+                              })
+                            )}
+                          </div>
+                        )}
+
+                        {activeTab === 'financials' && (
+                          <div className="space-y-6">
+                            {/* DOUBLE ENTRY BALANCE SHEET & STATEMENTS */}
+                            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                              {/* TWO COLUMN GRID: ASSETS vs LIABILITIES */}
+                              <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-200/85 text-xs">
                                 
-                                <button 
-                                  onClick={() => setCustomerToDelete(customer)}
-                                  className="absolute top-4 right-4 text-slate-400 hover:text-rose-600 p-1 rounded-lg hover:bg-rose-50"
-                                >
-                                  <IconTrash />
-                                </button>
-
-                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3 pb-3 border-b border-slate-100 pr-8">
-                                  <div>
-                                    <h4 className="font-bold text-slate-900 text-sm">{customer.name}</h4>
-                                    <p className="text-[10px] text-slate-500 flex flex-wrap items-center mt-1 gap-2">
-                                      <span className="flex items-center text-slate-600 font-semibold bg-slate-100 px-1.5 py-0.5 rounded">
-                                        <span className="mr-1"><IconPhone /></span> {customer.phone || '—'}
-                                      </span>
-                                      <span>ເລີ່ມ: {customer.startDate}</span>
-                                      <span className="text-emerald-700 font-semibold bg-emerald-50 px-1.5 py-0.5 rounded">
-                                        ຄົບກຳນົດ: {customer.endDate}
-                                      </span>
-                                    </p>
+                                {/* LEFT SIDE: ASSETS */}
+                                <div className="p-5 space-y-4 bg-emerald-50/20">
+                                  <h5 className="font-extrabold text-emerald-800 border-b border-emerald-200 pb-2 text-xs uppercase flex justify-between">
+                                    <span>1. ຊັບສິນ (ASSETS)</span>
+                                    <span className="text-emerald-700">ເດບິດ (+)</span>
+                                  </h5>
+                                  
+                                  <div className="space-y-2.5">
+                                    <div className="flex justify-between items-center">
+                                      <span className="text-slate-500 font-medium">ເງິນສົດໃນຄັງ (Cash on Hand)</span>
+                                      <span className="font-bold text-slate-900">{formatLAK(financialSummary.cashOnHand)}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center">
+                                      <span className="text-slate-500 font-medium">ຍອດເງິນກູ້ຄົງຄ້າງ (Outstanding Portfolio)</span>
+                                      <span className="font-bold text-slate-900">{formatLAK(financialSummary.activeOutstandingPortfolio)}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center">
+                                      <span className="text-slate-500 font-medium">ດອກເບ້ຍຄ້າງຮັບ (Interest Receivable)</span>
+                                      <span className="font-bold text-slate-900">{formatLAK(financialSummary.interestReceivable)}</span>
+                                    </div>
                                   </div>
-                                  <div>
-                                    <span className={`inline-block px-2 py-0.5 text-[10px] font-bold rounded-lg ${
-                                      customer.type === 'reducing' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
-                                    }`}>
-                                      {customer.type === 'reducing' ? 'ຫຼຸດຕົ້ນຫຼຸດດອກ' : 'ດອກເບ້ຍຄົງທີ່'}
-                                    </span>
+
+                                  <div className="pt-2 border-t border-emerald-200 flex justify-between items-center text-slate-950 font-extrabold text-sm bg-emerald-100/30 p-2.5 rounded-lg">
+                                    <span>ລວມຊັບສິນທັງໝົດ</span>
+                                    <span className="text-emerald-800">{formatLAK(financialSummary.totalAssets)}</span>
                                   </div>
                                 </div>
 
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-[11px] pb-3 border-b border-slate-100/50">
-                                  <div>
-                                    <p className="text-slate-400 font-bold mb-0.5">ຕົ້ນທຶນປ່ອຍກູ້</p>
-                                    <p className="font-extrabold text-slate-900">{formatLAK(customer.amount)}</p>
+                                {/* RIGHT SIDE: LIABILITIES & EQUITY */}
+                                <div className="p-5 space-y-4 bg-blue-50/20">
+                                  <h5 className="font-extrabold text-blue-800 border-b border-blue-200 pb-2 text-xs uppercase flex justify-between">
+                                    <span>2-3. ໜີ້ສິນ & ທຶນ (LIABILITIES & EQUITY)</span>
+                                    <span className="text-blue-700">ເຄຣດິດ (-)</span>
+                                  </h5>
+                                  
+                                  <div className="space-y-2.5">
+                                    <div className="font-bold text-blue-900 uppercase text-[9px] mb-1">2. ໜີ້ສິນ (Liabilities):</div>
+                                    <div className="flex justify-between items-center pl-2">
+                                      <span className="text-slate-500 font-medium">Leasing / ເງິນກູ້ຢືມພາຍນອກ</span>
+                                      <span className="font-bold text-slate-900">{formatLAK(financialSummary.totalLiabilities)}</span>
+                                    </div>
+                                    
+                                    <div className="font-bold text-blue-900 uppercase text-[9px] pt-2 border-t border-blue-100/40 mb-1">3. ສ່ວນຂອງເຈົ້າຂອງ (Capital/Equity):</div>
+                                    <div className="flex justify-between items-center pl-2">
+                                      <span className="text-slate-500 font-medium">ທຶນເລີ່ມຕົ້ນ</span>
+                                      <span className="font-bold text-slate-900">{formatLAK(financialSummary.initialCapital)}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center pl-2">
+                                      <span className="text-slate-500 font-medium">ລາຍຮັບສະສົມສຸທິ</span>
+                                      <span className="font-bold text-emerald-600">{formatLAK(financialSummary.netProfit)}</span>
+                                    </div>
                                   </div>
-                                  <div>
-                                    <p className="text-slate-400 font-bold mb-0.5">ຄ່າທຳນຽມເກັບກ່ອນ</p>
-                                    <p className="font-extrabold text-blue-600">{formatLAK(customer.fee)}</p>
-                                  </div>
-                                  <div>
-                                    <p className="text-slate-400 font-bold mb-0.5">ດອກເບ້ຍ / ໄລຍະເວລາ</p>
-                                    <p className="font-bold text-slate-800">{customer.rate}% / {customer.term} ເດືອນ</p>
-                                  </div>
-                                  <div>
-                                    <p className="text-slate-400 font-bold mb-0.5">ຄ່າຜ່ອນຊຳລະຕໍ່ເດືອນ</p>
-                                    <p className="font-extrabold text-blue-700">{formatLAK(customer.results.monthlyPayment)}</p>
-                                  </div>
-                                </div>
 
-                                {/* EXPANDABLE REPAYMENT GRID */}
-                                {isExpanded && (
-                                  <div className="mt-4 border border-slate-200 rounded-lg overflow-hidden max-h-60 overflow-y-auto">
-                                    <table className="w-full text-left text-xs border-collapse">
-                                      <thead>
-                                        <tr className="bg-slate-100 text-slate-500 font-bold text-[10px] border-b border-slate-200">
-                                          <th className="py-2 px-3 text-center">ງວດ</th>
-                                          <th className="py-2 px-3 text-center">ກຳນົດຊຳລະ</th>
-                                          <th className="py-2 px-3 text-right">ຍອດຊຳລະ</th>
-                                          <th className="py-2 px-3 text-right">ຕົ້ນທຶນ</th>
-                                          <th className="py-2 px-3 text-right">ດອກເບ້ຍ</th>
-                                          <th className="py-2 px-3 text-center">ການຊຳລະ</th>
-                                        </tr>
-                                      </thead>
-                                      <tbody className="divide-y divide-slate-100 text-slate-700 bg-white">
-                                        {customer.results.schedule.map((row) => (
-                                          <tr key={row.month} className="hover:bg-slate-50/50">
-                                            <td className="py-2 px-3 text-center font-bold text-slate-500">{row.month}</td>
-                                            <td className="py-2 px-3 text-center font-bold text-blue-700">{row.paymentDate}</td>
-                                            <td className="py-2 px-3 text-right font-bold text-slate-900">{formatLAK(row.payment)}</td>
-                                            <td className="py-2 px-3 text-right text-emerald-600 font-bold">{formatLAK(row.principalPayment)}</td>
-                                            <td className="py-2 px-3 text-right text-amber-600 font-bold">{formatLAK(row.interestPayment)}</td>
-                                            <td className="py-2 px-3 text-center">
-                                              <button
-                                                onClick={() => toggleInstallmentStatus(customer.id, row.month)}
-                                                className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all ${
-                                                  row.status === 'paid'
-                                                    ? 'bg-emerald-100 text-emerald-800'
-                                                    : 'bg-rose-100 text-rose-800 hover:bg-rose-200'
-                                                }`}
-                                              >
-                                                {row.status === 'paid' ? '✓ ຊຳລະແລ້ວ' : 'ໝາຍວ່າຊຳລະ'}
-                                              </button>
-                                            </td>
-                                          </tr>
-                                        ))}
-                                      </tbody>
-                                    </table>
+                                  <div className="pt-2 border-t border-blue-200 flex justify-between items-center text-slate-950 font-extrabold text-sm bg-blue-100/30 p-2.5 rounded-lg">
+                                    <span>ລວມໜີ້ສິນ ແລະ ທຶນ</span>
+                                    <span className="text-blue-800">{formatLAK(financialSummary.totalLiabilitiesAndEquity)}</span>
                                   </div>
-                                )}
-
-                                <div className="pt-3 flex flex-wrap gap-2 justify-between items-center">
-                                  <div className="flex gap-2">
-                                    <button
-                                      onClick={() => setExpandedCustomerId(isExpanded ? null : customer.id)}
-                                      className="text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg"
-                                    >
-                                      {isExpanded ? 'ຫຍໍ້ຕາຕະລາງ' : 'ຂະຫຍາຍຕາຕະລາງ'}
-                                    </button>
-                                    <button
-                                      onClick={() => printSingleCustomerSchedule(customer)}
-                                      className="text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg flex items-center"
-                                    >
-                                      <span className="mr-1"><IconPrinter /></span> ພິມສັນຍາ
-                                    </button>
-                                  </div>
-                                  <span className="text-[10px] text-slate-400 font-bold">
-                                    ຊຳລະແລ້ວ {paidCount}/{totalCount} ງວດ
-                                  </span>
                                 </div>
 
                               </div>
-                            );
-                          })}
-                        </div>
-                      )}
+
+                              {/* LOWER ROW: INCOME on Left, EXPENSES on Right */}
+                              <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-200/85 text-xs border-t border-slate-200 bg-slate-50/30">
+                                
+                                {/* LOWER LEFT: REVENUE */}
+                                <div className="p-5 space-y-2.5">
+                                  <h6 className="font-extrabold text-slate-700 uppercase text-[10px] tracking-wider mb-2 flex justify-between">
+                                    <span>5. ລາຍຮັບສະສົມ (OPERATIONAL INCOME)</span>
+                                    <span className="text-emerald-700 font-bold">ເຄຣດິດ (+)</span>
+                                  </h6>
+                                  <div className="space-y-2">
+                                    <div className="flex justify-between">
+                                      <span className="text-slate-500">ລາຍຮັບດອກເບ້ຍຄ້າງຮັບ</span>
+                                      <span className="font-bold">{formatLAK(financialSummary.totalExpectedInterest)}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                      <span className="text-slate-500">ຄ່າທຳນຽມສັນຍາ</span>
+                                      <span className="font-bold text-blue-600">{formatLAK(financialSummary.totalFeesCollected)}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                      <span className="text-slate-500">ລາຍຮັບນອກສັນຍາອື່ນໆ</span>
+                                      <span className="font-bold text-emerald-600">+{formatLAK(financialSummary.totalOtherIncome)}</span>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* LOWER RIGHT: EXPENSES */}
+                                <div className="p-5 space-y-2.5">
+                                  <h6 className="font-extrabold text-slate-700 uppercase text-[10px] tracking-wider mb-2 flex justify-between">
+                                    <span>4. ລາຍຈ່າຍບໍລິຫານ (OPERATIONAL EXPENSES)</span>
+                                    <span className="text-rose-700 font-bold">ເດບິດ (-)</span>
+                                  </h6>
+                                  <div className="space-y-2">
+                                    <div className="flex justify-between">
+                                      <span className="text-slate-500">ລາຍຈ່າຍບໍລິຫານ ແລະ ອື່ນໆ</span>
+                                      <span className="font-bold text-rose-600">-{formatLAK(financialSummary.totalOtherExpenses)}</span>
+                                    </div>
+                                    <div className="text-[10px] text-slate-400 font-semibold leading-relaxed pt-2 border-t border-slate-200/50">
+                                      * ຕົ້ນທຶນປ່ອຍກູ້ບໍ່ນັບເປັນລາຍຈ່າຍ ເພາະຖືກປ່ຽນເປັນຊັບສິນລູກໜີ້ (Outstanding Receivable) ຕາມຫຼັກການບັນຊີສາກົນ.
+                                    </div>
+                                  </div>
+                                </div>
+
+                              </div>
+
+                              {/* STATUTORY DOUBLE ENTRY STATUS ALIGNMENT */}
+                              <div className="bg-slate-100 p-4 flex flex-col sm:flex-row justify-between items-center text-[11px] font-bold text-slate-600 gap-2 border-t border-slate-200">
+                                <span className="flex items-center text-slate-700">
+                                  <span className="mr-1.5 text-emerald-600"><IconCheck /></span>
+                                  ສົມຜົນບັນຊີ (Accounting Balance Equation):
+                                </span>
+                                <span className="bg-white px-3 py-1 rounded-full border border-slate-200 text-emerald-700 shadow-sm font-extrabold text-[12px]">
+                                  ຊັບສິນທັງໝົດ = ໜີ້ສິນ + ສ່ວນຂອງເຈົ້າຂອງ (ດຸນດ່ຽງ 100%)
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
                     </div>
-
-                    {/* 2. DOUBLE ENTRY BALANCE SHEET & STATEMENTS */}
-                    <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
-                      <div className="bg-slate-900 text-white p-4 font-bold text-sm uppercase tracking-wider flex justify-between items-center px-6">
-                        <span>ບົດສະຫຼຸບຖານະການເງິນ ແລະ ງົບດຸນ (Balance Sheet)</span>
-                        <button 
-                          onClick={printFinancialStatement}
-                          className="bg-white hover:bg-slate-150 text-slate-900 rounded-lg px-3 py-1.5 font-extrabold text-xs flex items-center transition-all shadow"
-                        >
-                          <span className="mr-1"><IconPrinter /></span> ພິມລາຍງານ
-                        </button>
-                      </div>
-
-                      {/* TWO COLUMN GRID: ASSETS on Left, LIABILITIES & EQUITY on Right */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-200 text-xs">
-                        
-                        {/* LEFT SIDE: ASSETS */}
-                        <div className="p-4 space-y-3">
-                          <h5 className="font-extrabold text-slate-900 border-b pb-1.5 text-xs uppercase flex justify-between">
-                            <span>1. ຊັບສິນ (ASSETS)</span>
-                            <span className="text-emerald-700">ເດບິດ (+)</span>
-                          </h5>
-                          
-                          <div className="space-y-2">
-                            <div className="flex justify-between items-center">
-                              <span className="text-slate-500 font-medium">ເງິນສົດໃນຄັງ (Cash on Hand)</span>
-                              <span className="font-bold text-slate-900">{formatLAK(financialSummary.cashOnHand)}</span>
-                            </div>
-                            <div className="flex justify-between items-center">
-                              <span className="text-slate-500 font-medium">ຍອດເງິນກູ້ຄົງຄ້າງ (Outstanding Portfolio)</span>
-                              <span className="font-bold text-slate-900">{formatLAK(financialSummary.activeOutstandingPortfolio)}</span>
-                            </div>
-                            <div className="flex justify-between items-center">
-                              <span className="text-slate-500 font-medium">ດອກເບ້ຍຄ້າງຮັບ (Interest Receivable)</span>
-                              <span className="font-bold text-slate-900">{formatLAK(financialSummary.interestReceivable)}</span>
-                            </div>
-                          </div>
-
-                          <div className="pt-2 border-t border-slate-200 flex justify-between items-center text-slate-950 font-extrabold text-sm bg-slate-50 p-2 rounded">
-                            <span>ລວມຊັບສິນທັງໝົດ</span>
-                            <span className="text-emerald-800">{formatLAK(financialSummary.totalAssets)}</span>
-                          </div>
-                        </div>
-
-                        {/* RIGHT SIDE: LIABILITIES & EQUITY */}
-                        <div className="p-4 space-y-3">
-                          <h5 className="font-extrabold text-slate-900 border-b pb-1.5 text-xs uppercase flex justify-between">
-                            <span>2-3. ໜີ້ສິນ & ທຶນ (LIABILITIES & EQUITY)</span>
-                            <span className="text-blue-700">ເຄຣດິດ (-)</span>
-                          </h5>
-                          
-                          <div className="space-y-2">
-                            <div className="font-bold text-slate-700 uppercase text-[9px] mb-1">2. ໜີ້ສິນ (Liabilities):</div>
-                            <div className="flex justify-between items-center pl-2">
-                              <span>ເງິນກູ້ຢືມພາຍນອກ</span>
-                              <input 
-                                type="number" 
-                                value={ownerLiabilities} 
-                                onChange={(e) => updateLiabilitiesLocalOrCloud(Math.max(0, parseFloat(e.target.value) || 0))}
-                                className="w-24 px-2 py-0.5 border border-slate-300 rounded font-bold text-right"
-                              />
-                            </div>
-                            
-                            <div className="font-bold text-slate-700 uppercase text-[9px] pt-2 border-t border-slate-100 mb-1">3. ສ່ວນຂອງເຈົ້າຂອງ (Capital/Equity):</div>
-                            <div className="flex justify-between items-center pl-2">
-                              <span>ທຶນເລີ່ມຕົ້ນ</span>
-                              <input 
-                                type="number" 
-                                value={ownerCapital} 
-                                onChange={(e) => updateCapitalLocalOrCloud(Math.max(0, parseFloat(e.target.value) || 0))}
-                                className="w-24 px-2 py-0.5 border border-slate-300 rounded font-bold text-right"
-                              />
-                            </div>
-                            <div className="flex justify-between items-center pl-2">
-                              <span className="text-slate-500 font-medium">ລາຍຮັບສະສົມສຸທິ</span>
-                              <span className="font-bold text-emerald-600">{formatLAK(financialSummary.netProfit)}</span>
-                            </div>
-                          </div>
-
-                          <div className="pt-2 border-t border-slate-200 flex justify-between items-center text-slate-950 font-extrabold text-sm bg-slate-50 p-2 rounded">
-                            <span>ລວມໜີ້ສິນ ແລະ ທຶນ</span>
-                            <span className="text-blue-800">{formatLAK(financialSummary.totalLiabilitiesAndEquity)}</span>
-                          </div>
-                        </div>
-
-                      </div>
-
-                      {/* LOWER ROW: INCOME on Left, EXPENSES on Right */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-200 text-xs border-t border-slate-200 bg-slate-50/50">
-                        
-                        {/* LOWER LEFT: REVENUE */}
-                        <div className="p-4 space-y-2">
-                          <h6 className="font-extrabold text-slate-700 uppercase text-[10px] tracking-wider mb-1.5 flex justify-between">
-                            <span>5. ລາຍຮັບສະສົມ (OPERATIONAL INCOME)</span>
-                            <span className="text-emerald-700 font-bold">ເຄຣດິດ (+)</span>
-                          </h6>
-                          <div className="space-y-1.5">
-                            <div className="flex justify-between">
-                              <span className="text-slate-500">ລາຍຮັບດອກເບ້ຍຄ້າງຮັບ</span>
-                              <span className="font-bold">{formatLAK(financialSummary.totalExpectedInterest)}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-slate-500">ຄ່າທຳນຽມສັນຍາ</span>
-                              <span className="font-bold text-blue-600">{formatLAK(financialSummary.totalFeesCollected)}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-slate-500">ລາຍຮັບນອກສັນຍາອື່ນໆ</span>
-                              <span className="font-bold text-emerald-600">+{formatLAK(financialSummary.totalOtherIncome)}</span>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* LOWER RIGHT: EXPENSE */}
-                        <div className="p-4 space-y-2">
-                          <h6 className="font-extrabold text-slate-700 uppercase text-[10px] tracking-wider mb-1.5 flex justify-between">
-                            <span>4. ລາຍຈ່າຍບໍລິຫານ (OPERATIONAL EXPENSES)</span>
-                            <span className="text-rose-700 font-bold">ເດບິດ (-)</span>
-                          </h6>
-                          <div className="space-y-1.5">
-                            <div className="flex justify-between">
-                              <span className="text-slate-500">ລາຍຈ່າຍບໍລິຫານ ແລະ ອື່ນໆ</span>
-                              <span className="font-bold text-rose-600">-{formatLAK(financialSummary.totalOtherExpenses)}</span>
-                            </div>
-                            <div className="text-[10px] text-slate-400 font-semibold leading-relaxed pt-1.5 border-t border-slate-200/50">
-                              * ຕົ້ນທຶນປ່ອຍກູ້ບໍ່ນັບເປັນລາຍຈ່າຍ ເພາະຖືກປ່ຽນເປັນຊັບສິນລູກໜີ້ (Outstanding Receivable) ຕາມຫຼັກການບັນຊີສາກົນ.
-                            </div>
-                          </div>
-                        </div>
-
-                      </div>
-
-                      {/* STATUTORY DOUBLE ENTRY STATUS ALIGNMENT */}
-                      <div className="bg-slate-100 p-3 flex flex-col sm:flex-row justify-between items-center text-[11px] font-bold text-slate-600 gap-2 border-t border-slate-200">
-                        <span className="flex items-center text-slate-700">
-                          <span className="mr-1.5 text-emerald-600"><IconCheck /></span>
-                          ສົມຜົນບັນຊີ (Accounting Balance Equation):
-                        </span>
-                        <span className="bg-white px-3 py-0.5 rounded-full border border-slate-200 text-emerald-700 shadow-sm font-extrabold">
-                          ຊັບສິນທັງໝົດ = ໜີ້ສິນ + ສ່ວນຂອງເຈົ້າຂອງ (ດຸນດ່ຽງ 100%)
-                        </span>
-                      </div>
-                    </div>
-
                   </div>
 
                 </div>
@@ -2074,8 +2193,8 @@
           );
         }
 
-        // Render React Application securely
-        const root = ReactDOM.createRoot(document.getElementById('root'));
+        const container = document.getElementById('root');
+        const root = ReactDOM.createRoot(container);
         root.render(<App />);
     </script>
 </body>
